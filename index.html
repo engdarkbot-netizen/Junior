@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ali Aljehani</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --dark: #0d0d0f;
+      --dark-2: #13131a;
+      --dark-3: #1c1c26;
+      --text: #e8e4dc;
+      --text-muted: #9a9080;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'Raleway', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ── CANVAS PARTICLES ─────────────────────────────── */
+    #particles {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ── HERO ─────────────────────────────────────────── */
+    #hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+      z-index: 1;
+    }
+
+    .monogram {
+      width: 90px; height: 90px;
+      border: 2px solid var(--gold);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 2.2rem;
+      color: var(--gold);
+      margin-bottom: 2.5rem;
+      opacity: 0;
+      animation: fadeDown 0.9s ease 0.3s forwards;
+      position: relative;
+    }
+    .monogram::before {
+      content: '';
+      position: absolute;
+      inset: -8px;
+      border-radius: 50%;
+      border: 1px solid rgba(201,168,76,0.25);
+      animation: pulse-ring 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { transform: scale(1); opacity: 0.5; }
+      50%       { transform: scale(1.12); opacity: 0.15; }
+    }
+
+    .divider-line {
+      width: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 1.5rem auto;
+      animation: expandLine 1s ease 1.4s forwards;
+    }
+
+    @keyframes expandLine {
+      to { width: 200px; }
+    }
+
+    .hero-name {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(3rem, 8vw, 6rem);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      opacity: 0;
+      animation: fadeUp 1s ease 0.7s forwards;
+    }
+    .hero-name span { color: var(--gold); }
+
+    .hero-title {
+      font-family: 'Raleway', sans-serif;
+      font-weight: 300;
+      font-size: clamp(0.95rem, 2.5vw, 1.3rem);
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 1rem;
+      opacity: 0;
+      animation: fadeUp 1s ease 1s forwards;
+    }
+
+    .hero-tagline {
+      max-width: 500px;
+      margin: 2.5rem auto 0;
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--text-muted);
+      opacity: 0;
+      animation: fadeUp 1s ease 1.3s forwards;
+    }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 2.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      opacity: 0;
+      animation: fadeIn 1s ease 2.2s forwards;
+    }
+    .scroll-hint .arrow {
+      width: 1px; height: 50px;
+      background: linear-gradient(to bottom, var(--gold), transparent);
+      animation: scrollPulse 2s ease-in-out infinite;
+    }
+    @keyframes scrollPulse {
+      0%, 100% { opacity: 1; transform: scaleY(1); }
+      50%       { opacity: 0.4; transform: scaleY(0.8); }
+    }
+
+    /* ── SHARED SECTION ───────────────────────────────── */
+    section {
+      position: relative;
+      z-index: 1;
+      padding: 6rem 2rem;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.75rem;
+    }
+
+    .section-title {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(40px);
+      transition: opacity 0.9s ease, transform 0.9s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ── ABOUT ────────────────────────────────────────── */
+    #about {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    #about .about-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4rem;
+      align-items: center;
+    }
+
+    .about-portrait {
+      position: relative;
+      aspect-ratio: 4/5;
+      max-width: 340px;
+    }
+    .about-portrait .portrait-box {
+      width: 100%;
+      height: 100%;
+      background: var(--dark-3);
+      border: 1px solid rgba(201,168,76,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Playfair Display', serif;
+      font-size: 5rem;
+      color: rgba(201,168,76,0.2);
+    }
+    .about-portrait::before {
+      content: '';
+      position: absolute;
+      inset: -12px;
+      border: 1px solid rgba(201,168,76,0.15);
+      z-index: -1;
+    }
+    .about-portrait::after {
+      content: '';
+      position: absolute;
+      bottom: -16px; right: -16px;
+      width: 60%; height: 60%;
+      background: rgba(201,168,76,0.04);
+      border: 1px solid rgba(201,168,76,0.1);
+      z-index: -2;
+    }
+
+    .about-text p {
+      font-size: 1.05rem;
+      line-height: 1.9;
+      color: var(--text-muted);
+      margin-bottom: 1.2rem;
+    }
+    .about-text p strong { color: var(--text); font-weight: 500; }
+
+    /* ── EXPERTISE ────────────────────────────────────── */
+    #expertise {
+      background: var(--dark-2);
+    }
+    .expertise-inner {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+
+    .skill-card {
+      background: var(--dark-3);
+      border: 1px solid rgba(201,168,76,0.12);
+      padding: 2rem 1.75rem;
+      transition: border-color 0.3s, transform 0.3s;
+    }
+    .skill-card:hover {
+      border-color: rgba(201,168,76,0.5);
+      transform: translateY(-4px);
+    }
+    .skill-card .icon {
+      font-size: 1.8rem;
+      margin-bottom: 1rem;
+    }
+    .skill-card h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.15rem;
+      margin-bottom: 0.6rem;
+    }
+    .skill-card p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+    }
+
+    /* ── PHILOSOPHY ───────────────────────────────────── */
+    #philosophy {
+      max-width: 700px;
+      margin: 0 auto;
+      text-align: center;
+    }
+
+    .quote-block {
+      position: relative;
+      margin: 3rem 0;
+      padding: 2.5rem 3rem;
+      border-left: 3px solid var(--gold);
+      text-align: left;
+      background: var(--dark-2);
+    }
+    .quote-block blockquote {
+      font-family: 'Playfair Display', serif;
+      font-style: italic;
+      font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .quote-block cite {
+      display: block;
+      margin-top: 1.2rem;
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      font-style: normal;
+    }
+
+    /* ── CONTACT ──────────────────────────────────────── */
+    #contact {
+      background: var(--dark-2);
+      text-align: center;
+    }
+    .contact-inner {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .contact-inner p {
+      color: var(--text-muted);
+      line-height: 1.8;
+      margin-bottom: 2.5rem;
+    }
+    .contact-btn {
+      display: inline-block;
+      padding: 1rem 3rem;
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      text-decoration: none;
+      font-family: 'Raleway', sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      transition: background 0.3s, color 0.3s;
+    }
+    .contact-btn:hover {
+      background: var(--gold);
+      color: var(--dark);
+    }
+
+    /* ── FOOTER ───────────────────────────────────────── */
+    footer {
+      position: relative; z-index: 1;
+      text-align: center;
+      padding: 2rem;
+      font-size: 0.78rem;
+      letter-spacing: 0.15em;
+      color: rgba(154,144,128,0.4);
+      border-top: 1px solid rgba(201,168,76,0.08);
+    }
+
+    /* ── KEYFRAMES ────────────────────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to   { opacity: 1; transform: none; }
+    }
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────────── */
+    @media (max-width: 680px) {
+      #about .about-grid { grid-template-columns: 1fr; }
+      .about-portrait { max-width: 100%; }
+      .quote-block { padding: 1.8rem 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="monogram">A</div>
+
+  <h1 class="hero-name">Ali <span>Aljehani</span></h1>
+  <p class="hero-title">Technical Leader</p>
+
+  <div class="divider-line"></div>
+
+  <p class="hero-tagline">
+    Bridging vision and execution — building teams, systems,
+    and strategies that endure.
+  </p>
+
+  <div class="scroll-hint">
+    <span>Scroll</span>
+    <div class="arrow"></div>
+  </div>
+</section>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-grid">
+    <div class="about-portrait reveal">
+      <div class="portrait-box">A·A</div>
+    </div>
+
+    <div class="about-text reveal" style="transition-delay:0.15s">
+      <p class="section-label">About</p>
+      <h2 class="section-title">Crafting the Future, One Decision at a Time</h2>
+      <p>
+        I'm <strong>Ali Aljehani</strong>, a Technical Leader passionate about
+        transforming complex challenges into elegant, scalable solutions.
+      </p>
+      <p>
+        With a foundation built on both deep technical expertise and
+        strategic thinking, I thrive at the intersection of
+        <strong>engineering excellence</strong> and
+        <strong>organizational impact</strong>.
+      </p>
+      <p>
+        My approach is rooted in clarity of purpose, rigorous craftsmanship,
+        and an unwavering commitment to the people I lead.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- EXPERTISE -->
+<section id="expertise">
+  <div class="expertise-inner">
+    <div class="reveal">
+      <p class="section-label">What I Do</p>
+      <h2 class="section-title">Areas of Expertise</h2>
+    </div>
+    <div class="skills-grid">
+      <div class="skill-card reveal" style="transition-delay:0.05s">
+        <div class="icon">⚙️</div>
+        <h3>Technical Strategy</h3>
+        <p>Designing architecture and roadmaps that align engineering capability with long-term business goals.</p>
+      </div>
+      <div class="skill-card reveal" style="transition-delay:0.15s">
+        <div class="icon">🧭</div>
+        <h3>Team Leadership</h3>
+        <p>Building high-performance engineering cultures grounded in trust, accountability, and continuous growth.</p>
+      </div>
+      <div class="skill-card reveal" style="transition-delay:0.25s">
+        <div class="icon">🔬</div>
+        <h3>Systems Thinking</h3>
+        <p>Navigating complexity with structured reasoning — turning ambiguity into clear, actionable direction.</p>
+      </div>
+      <div class="skill-card reveal" style="transition-delay:0.35s">
+        <div class="icon">🌐</div>
+        <h3>Innovation & Scale</h3>
+        <p>Shipping products that grow gracefully — balancing speed of delivery with depth of engineering quality.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PHILOSOPHY -->
+<section id="philosophy">
+  <div class="reveal">
+    <p class="section-label">Guiding Principle</p>
+    <h2 class="section-title">Philosophy</h2>
+  </div>
+  <div class="quote-block reveal" style="transition-delay:0.2s">
+    <blockquote>
+      "Great technology is not built by brilliant individuals alone —
+      it is forged by disciplined teams who share a clarity of vision
+      and the courage to execute relentlessly."
+    </blockquote>
+    <cite>— Ali Aljehani</cite>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="contact-inner">
+    <div class="reveal">
+      <p class="section-label">Get in Touch</p>
+      <h2 class="section-title">Let's Connect</h2>
+    </div>
+    <p class="reveal" style="transition-delay:0.15s">
+      Whether you're looking to collaborate, explore ideas, or simply
+      have a meaningful conversation — I'd welcome the opportunity.
+    </p>
+    <a href="mailto:ali@example.com" class="contact-btn reveal" style="transition-delay:0.3s">
+      Send a Message
+    </a>
+  </div>
+</section>
+
+<footer>
+  &copy; 2026 &nbsp;·&nbsp; Ali Aljehani &nbsp;·&nbsp; All rights reserved
+</footer>
+
+<script>
+  /* ── PARTICLE CANVAS ──────────────────────────────── */
+  (function () {
+    const canvas = document.getElementById('particles');
+    const ctx = canvas.getContext('2d');
+    let W, H, particles = [];
+
+    const GOLD = 'rgba(201,168,76,';
+    const COUNT = 80;
+
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+
+    function Particle() {
+      this.reset();
+    }
+    Particle.prototype.reset = function () {
+      this.x  = Math.random() * W;
+      this.y  = Math.random() * H;
+      this.r  = Math.random() * 1.4 + 0.3;
+      this.vx = (Math.random() - 0.5) * 0.3;
+      this.vy = (Math.random() - 0.5) * 0.3;
+      this.a  = Math.random() * 0.5 + 0.1;
+    };
+    Particle.prototype.update = function () {
+      this.x += this.vx;
+      this.y += this.vy;
+      if (this.x < 0 || this.x > W) this.vx *= -1;
+      if (this.y < 0 || this.y > H) this.vy *= -1;
+    };
+    Particle.prototype.draw = function () {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fillStyle = GOLD + this.a + ')';
+      ctx.fill();
+    };
+
+    function initParticles() {
+      particles = [];
+      for (let i = 0; i < COUNT; i++) particles.push(new Particle());
+    }
+
+    function drawLines() {
+      const LINK = 130;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < LINK) {
+            const alpha = (1 - dist / LINK) * 0.12;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = GOLD + alpha + ')';
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function loop() {
+      ctx.clearRect(0, 0, W, H);
+      particles.forEach(p => { p.update(); p.draw(); });
+      drawLines();
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', () => { resize(); initParticles(); });
+    resize();
+    initParticles();
+    loop();
+  })();
+
+  /* ── SCROLL REVEAL ────────────────────────────────── */
+  (function () {
+    const els = document.querySelectorAll('.reveal');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          io.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    els.forEach(el => io.observe(el));
+  })();
+</script>
+
+</body>
+</html>
