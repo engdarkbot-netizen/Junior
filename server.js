@@ -19,10 +19,15 @@ const zlib       = require('zlib');
 const { chromium } = require('playwright');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
+const MAX_QUERY_LEN = 200;
+
 function normalizeQuery(q) {
   return q
     .trim()
+    .slice(0, MAX_QUERY_LEN)
     .toLowerCase()
+    .replace(/[<>"'`]/g, '')                 // strip HTML-dangerous chars before storing
+    .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)) // Arabic-Indic → ASCII digits
     .replace(/[\u064B-\u065F\u0670]/g, '')   // strip diacritics (tashkeel)
     .replace(/[أإآٱ]/g, 'ا')                 // unify alef variants
     .replace(/ة/g, 'ه')                      // ta marbuta → ha
@@ -93,6 +98,7 @@ const analytics = {
   cacheHits:     0,
   cacheMisses:   0,
   queryCount:    new Map(),  // normalizedQuery -> count
+  queryLastSeen: new Map(),  // normalizedQuery -> timestamp
   storeResults:  new Map(),  // storeId -> { success, fail, totalProducts }
   responseTimes: [],         // last 500 { query, ms, cached, ts }
   startedAt:     Date.now(),
@@ -103,6 +109,7 @@ function trackSearch(nKey, ms, cached, stores) {
   if (cached) analytics.cacheHits++;
   else        analytics.cacheMisses++;
   analytics.queryCount.set(nKey, (analytics.queryCount.get(nKey) || 0) + 1);
+  analytics.queryLastSeen.set(nKey, Date.now());
   analytics.responseTimes.push({ query: nKey, ms, cached, ts: Date.now() });
   if (analytics.responseTimes.length > 500) analytics.responseTimes.shift();
   if (stores) {
@@ -777,6 +784,7 @@ async function runScrape(query) {
 app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  if (query.length > MAX_QUERY_LEN) return res.status(400).json({ error: `Query too long (max ${MAX_QUERY_LEN} characters)` });
 
   const key = normalizeQuery(query);
 
@@ -821,7 +829,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
 /* ─── GET /api/search/stream — Server-Sent Events ──────────────── */
 app.get('/api/search/stream', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
-  if (!query) return res.status(400).end();
+  if (!query || query.length > MAX_QUERY_LEN) return res.status(400).end();
   const key = normalizeQuery(query);
 
   res.setHeader('Content-Type',  'text/event-stream; charset=utf-8');
@@ -873,7 +881,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     }
   }
 
-  const finalData = { query, timestamp: new Date().toISOString(), stores: allResults };
+  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || undefined, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults);
   write('done', finalData);
@@ -932,6 +940,11 @@ app.get('/api/basket', rateLimit, async (req, res) => {
     });
   });
 
+  // Round totals to avoid floating-point precision artefacts (e.g. 6.060000000005)
+  Object.values(storeMap).forEach(s => {
+    s.total = Math.round(s.total * 100) / 100;
+  });
+
   const stores = Object.values(storeMap)
     .filter(s => s.total > 0 || s.missing > 0)
     .sort((a, b) => {
@@ -948,7 +961,11 @@ app.get('/api/trending', (req, res) => {
   const trending = [...analytics.queryCount.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([query, count]) => ({ query, count }));
+    .map(([query, count]) => ({
+      query,
+      count,
+      lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+    }));
   res.json({ trending, total: analytics.totalSearches });
 });
 
@@ -985,7 +1002,10 @@ app.get('/api/stats', (req, res) => {
     topQueries:    [...analytics.queryCount.entries()]
                      .sort((a, b) => b[1] - a[1])
                      .slice(0, 10)
-                     .map(([query, count]) => ({ query, count })),
+                     .map(([query, count]) => ({
+                       query, count,
+                       lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+                     })),
     stores,
   });
 });

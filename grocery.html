@@ -1208,6 +1208,15 @@ function sanitize(str) {
   return d.innerHTML;
 }
 
+function safeUrl(url) {
+  if (!url) return '#';
+  try {
+    const u = new URL(url, window.location.origin);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '#';
+    return u.href;
+  } catch (_) { return '#'; }
+}
+
 function setStatus(msg, type = '') {
   const bar = $('status-bar');
   bar.className = type ? `visible ${type}` : msg ? 'visible' : '';
@@ -1609,13 +1618,13 @@ function renderResults(data, ms) {
 
     // Product image
     const imgHtml = repProduct.image
-      ? `<img class="card-img" src="${sanitize(repProduct.image)}" alt="" loading="lazy"
+      ? `<img class="card-img" src="${safeUrl(repProduct.image)}" alt="" loading="lazy"
             onerror="this.parentElement.innerHTML='<span class=card-img-placeholder>🛒</span>'">`
       : `<span class="card-img-placeholder">🛒</span>`;
 
     // View link
     const viewHtml = repProduct.url
-      ? `<a href="${sanitize(repProduct.url)}" target="_blank" rel="noopener noreferrer">View at ${sanitize(repStore.name)} →</a>`
+      ? `<a href="${safeUrl(repProduct.url)}" target="_blank" rel="noopener noreferrer">View at ${sanitize(repStore.name)} →</a>`
       : `<span>Cheapest at ${sanitize(repStore.name)}</span>`;
 
     // Price rows (sorted cheapest first)
@@ -1660,7 +1669,7 @@ function renderResults(data, ms) {
     const savingsHtml = parseFloat(savings) > 0.05
       ? `<div class="savings-strip">
            💰 Save <strong> ${savings} SAR</strong> vs most expensive
-           ${repProduct.url ? `<a class="shop-btn" href="${sanitize(repProduct.url)}" target="_blank" rel="noopener">Shop now →</a>` : ''}
+           ${repProduct.url ? `<a class="shop-btn" href="${safeUrl(repProduct.url)}" target="_blank" rel="noopener">Shop now →</a>` : ''}
            <button class="add-basket-btn" data-slot="${slot}" title="Add cheapest to basket">+ Basket</button>
          </div>`
       : `<div class="savings-strip" style="background:var(--surface-alt)">
