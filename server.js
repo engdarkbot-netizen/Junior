@@ -143,7 +143,10 @@ function trackSearch(nKey, ms, cached, stores) {
       if (!analytics.storeResults.has(s.id))
         analytics.storeResults.set(s.id, { success: 0, fail: 0, totalProducts: 0 });
       const r = analytics.storeResults.get(s.id);
-      if (s.error && !(s.products && s.products.length)) r.fail++;
+      if (s.error && !(s.products && s.products.length)) {
+        r.fail++;
+        r.lastError = { message: s.error, timestamp: new Date().toISOString() };
+      }
       else { r.success++; r.totalProducts += s.products ? s.products.length : 0; }
     });
   }
@@ -1238,25 +1241,54 @@ app.get('/api/stats', (req, res) => {
     };
   }
 
+  const errorLogs = recentLogs.filter(e => e.level === 'error');
+
   res.json({
-    uptime:        Math.floor(process.uptime()),
-    startedAt:     new Date(analytics.startedAt).toISOString(),
-    totalSearches: analytics.totalSearches,
-    cacheHits:     analytics.cacheHits,
-    cacheMisses:   analytics.cacheMisses,
-    cacheHitRate:  hitRate,
-    cacheSize:     searchCache.size,
-    avgResponseMs: avgMs,
-    uniqueQueries: analytics.queryCount.size,
-    topQueries:    [...analytics.queryCount.entries()]
-                     .sort((a, b) => b[1] - a[1])
-                     .slice(0, 10)
-                     .map(([query, count]) => ({
-                       query, count,
-                       lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
-                     })),
+    uptime:               Math.floor(process.uptime()),
+    startedAt:            new Date(analytics.startedAt).toISOString(),
+    totalSearches:        analytics.totalSearches,
+    cacheHits:            analytics.cacheHits,
+    cacheMisses:          analytics.cacheMisses,
+    cacheHitRate:         hitRate,
+    cacheSize:            searchCache.size,
+    avgResponseMs:        avgMs,
+    uniqueQueries:        analytics.queryCount.size,
+    demoMode:             DEMO_MODE,
+    demoReason:           DEMO_REASON,
+    alertsCount:          priceAlerts.size,
+    priceHistoryQueries:  priceHistory.size,
+    recentErrors:         errorLogs.slice(-5),
+    topQueries:           [...analytics.queryCount.entries()]
+                            .sort((a, b) => b[1] - a[1])
+                            .slice(0, 10)
+                            .map(([query, count]) => ({
+                              query, count,
+                              lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+                            })),
     stores,
   });
+});
+
+/* ─── POST /api/admin/clear-cache — clears the search result cache ─ */
+// TODO: add admin auth token check
+app.post('/api/admin/clear-cache', (req, res) => {
+  const cleared = searchCache.size;
+  searchCache.clear();
+  res.json({ cleared, timestamp: new Date().toISOString() });
+});
+
+/* ─── POST /api/admin/reset-analytics — resets analytics counters ── */
+// TODO: add admin auth token check
+app.post('/api/admin/reset-analytics', (req, res) => {
+  analytics.totalSearches = 0;
+  analytics.cacheHits     = 0;
+  analytics.cacheMisses   = 0;
+  analytics.queryCount.clear();
+  analytics.queryLastSeen.clear();
+  analytics.storeResults.clear();
+  analytics.responseTimes.length = 0;
+  analytics.startedAt     = Date.now();
+  res.json({ reset: true, timestamp: new Date().toISOString() });
 });
 
 /* ─── Health check ─────────────────────────────────────────────── */
