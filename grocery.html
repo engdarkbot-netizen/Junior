@@ -1126,6 +1126,35 @@ footer {
 }
 .wa-share-btn.visible { display: inline-flex; }
 .wa-share-btn:hover { background: #1ebe5d; border-color: #1ebe5d; }
+
+/* ── Best-store summary card ───────────────────────────────────── */
+#best-store-card {
+  display: none;
+  align-items: center;
+  gap: .75rem;
+  background: linear-gradient(135deg, #0f5132, #198754);
+  color: #fff;
+  border-radius: var(--r-xl);
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 16px rgba(15,81,50,.3);
+  animation: card-in var(--slow) var(--ease) both;
+}
+#best-store-card.visible { display: flex; }
+.bsc-label {
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .75;
+  margin-bottom: .15rem;
+}
+.bsc-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.bsc-icon { font-size: 2rem; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -1231,6 +1260,15 @@ footer {
     <div class="demo-text">
       <div class="demo-en">Prices shown are estimates. Live scraping may be limited by store bot protection.</div>
       <div class="demo-ar">الأسعار المعروضة تقديرية. قد يكون الاستخراج المباشر مقيداً بحماية المتاجر من البرامج الآلية.</div>
+    </div>
+  </div>
+
+  <!-- Best-store summary card -->
+  <div id="best-store-card">
+    <div class="bsc-icon">🏆</div>
+    <div>
+      <div class="bsc-label">Best store overall</div>
+      <div class="bsc-value" id="bestStoreValue">—</div>
     </div>
   </div>
 
@@ -1371,6 +1409,10 @@ function safeUrl(url) {
   } catch (_) { return '#'; }
 }
 
+function formatSAR(p) {
+  return 'SAR ' + p.toFixed(2);
+}
+
 function setStatus(msg, type = '') {
   const bar = $('status-bar');
   bar.className = type ? `visible ${type}` : msg ? 'visible' : '';
@@ -1429,7 +1471,11 @@ function buildDropdown(filter = '') {
 
   let html = '';
   if (recent.length) {
-    html += `<div class="dropdown-section"><div class="dropdown-label">Recent</div>`;
+    html += `<div class="dropdown-section">
+      <div style="display:flex;align-items:center;padding:.4rem 1rem .2rem">
+        <span class="dropdown-label" style="padding:0;flex:1">Recent</span>
+        <button id="clearHistoryBtn" style="font-size:.7rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;font-family:inherit" title="Clear search history">Clear</button>
+      </div>`;
     recent.slice(0, 5).forEach(r => {
       html += `<div class="dropdown-item" data-q="${sanitize(r)}">
                  <span class="di-icon">🕐</span>${sanitize(r)}
@@ -1563,6 +1609,7 @@ async function doSearch(rawQuery) {
   hide('results-bar');
   hide('no-results');
   hide('error-box');
+  $('best-store-card').classList.remove('visible');
   $('store-filter').classList.remove('visible');
   $('demo-notice').classList.remove('visible');
   const _waBtn = $('waShareBtn'); if (_waBtn) _waBtn.classList.remove('visible');
@@ -1765,6 +1812,26 @@ function renderResults(data, ms) {
     });
   });
 
+  // Best-store summary card (uses all stores, not filtered)
+  const bscEl = $('best-store-card');
+  if (storesWithProducts.length > 0) {
+    // For each store, compute avg price across its products
+    const storeAvgs = storesWithProducts.map(s => {
+      const prices = s.products.map(p => p.price).filter(Boolean);
+      const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : Infinity;
+      return { store: s, count: prices.length, avg };
+    });
+    // Best = most products, then lowest avg
+    storeAvgs.sort((a, b) => b.count - a.count || a.avg - b.avg);
+    const best = storeAvgs[0];
+    const storeInfo = STORE_MAP[best.store.id] || best.store;
+    $('bestStoreValue').textContent =
+      `${storeInfo.emoji} ${best.store.name} — avg ${formatSAR(best.avg)} · ${best.count} product${best.count !== 1 ? 's' : ''}`;
+    bscEl.classList.add('visible');
+  } else {
+    bscEl.classList.remove('visible');
+  }
+
   // Filter stores
   const filtered = activeFilter === 'all'
     ? storesWithProducts
@@ -1832,7 +1899,7 @@ function renderResults(data, ms) {
             </div>
           </div>
           <div class="price-val-wrap">
-            <div class="price-num">${sp.product.price.toFixed(2)}<span class="price-sar"> SAR</span>${isBest ? '<span class="best-tag">BEST</span>' : ''}${(() => { const t = getPriceTrend(data.query, sp.store.id, sp.product.price); return t ? `<span class="price-trend ${t}">${t === 'up' ? '↑' : '↓'}</span>` : ''; })()}</div>
+            <div class="price-num">${formatSAR(sp.product.price)}<span class="price-sar"></span>${isBest ? '<span class="best-tag">BEST</span>' : ''}${(() => { const t = getPriceTrend(data.query, sp.store.id, sp.product.price); return t ? `<span class="price-trend ${t}">${t === 'up' ? '↑' : '↓'}</span>` : ''; })()}</div>
           </div>
         </div>`;
     }).join('');
@@ -1876,7 +1943,7 @@ function renderResults(data, ms) {
         </div>
         <div class="card-badge">
           <div class="best-badge">👑 Best price</div>
-          <div class="best-price-num">${minPrice.toFixed(2)}<span class="sar"> SAR</span></div>
+          <div class="best-price-num">${formatSAR(minPrice)}<span class="sar"></span></div>
         </div>
       </div>
       <div class="price-table">
@@ -1957,7 +2024,7 @@ function renderResults(data, ms) {
         const p = s.products.find(pr => pr.price === globalMin);
         if (p) { cpName = p.name || data.query; cpStore = s.name; break; }
       }
-      const copyText = `${cpName} — ${globalMin.toFixed(2)} SAR at ${cpStore}`;
+      const copyText = `${cpName} — ${formatSAR(globalMin)} at ${cpStore}`;
       copyBtn.onclick = async () => {
         try {
           await navigator.clipboard.writeText(copyText);
@@ -2151,7 +2218,7 @@ function renderBasket() {
         <div class="basket-item-name">${sanitize(item.name.slice(0, 50))}</div>
         <div class="basket-item-store">${sanitize(item.store)} · ${sanitize(item.query)}</div>
       </div>
-      <div class="basket-item-price">${item.price.toFixed(2)} SAR</div>
+      <div class="basket-item-price">${formatSAR(item.price)}</div>
       <button class="basket-item-remove" data-query="${sanitize(item.query)}" title="Remove">×</button>
     </div>
   `).join('');
@@ -2228,7 +2295,7 @@ function renderBasketResults(data) {
           ${s.missing > 0 ? `<div class="bsr-missing">${s.missing} item${s.missing > 1 ? 's' : ''} not found</div>` : ''}
         </div>
         ${isCheapest ? '<span class="bsr-best-tag">BEST</span>' : ''}
-        <div class="bsr-total">${s.total.toFixed(2)} SAR</div>
+        <div class="bsr-total">${formatSAR(s.total)}</div>
       </div>`;
   });
 
