@@ -527,10 +527,13 @@ const STORE_VARIANCE = {
   bindawood: +0.01,
 };
 
-// Build a normalized lookup so "أرز" key matches normalized query "ارز"
-const DEMO_PRODUCTS_NORMALIZED = Object.fromEntries(
-  Object.entries(DEMO_PRODUCTS).map(([k, v]) => [normalizeQuery(k), v])
-);
+// Build a normalized keyword→products lookup from DEMO_CATALOG
+const DEMO_PRODUCTS_NORMALIZED = { default: DEMO_DEFAULT };
+for (const entry of DEMO_CATALOG) {
+  for (const kw of entry.keywords) {
+    DEMO_PRODUCTS_NORMALIZED[normalizeQuery(kw)] = entry.products;
+  }
+}
 
 function getDemoProducts(query, storeId) {
   const key = normalizeQuery(query);
