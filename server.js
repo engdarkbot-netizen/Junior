@@ -540,7 +540,6 @@ function getDemoProducts(query, storeId) {
     if (normKey === 'default') continue;
     if (key.includes(normKey) || normKey.includes(key)) { products = v; break; }
   }
-  const products = bestCategory ? bestCategory.products : DEMO_DEFAULT;
   const variance = STORE_VARIANCE[storeId] || 0;
   return products.map(p => ({
     ...p,
