@@ -396,6 +396,102 @@ const DEMO_CATALOG = [
       { name: 'بصل أخضر (٢٠٠ جم)',      price:  2.95, image: '', url: '#' },
     ],
   },
+  /* ── NEW CATEGORIES (Iteration 8) ─────────────────────────── */
+  {
+    keywords: ['pasta', 'macaroni', 'معكرونة', 'مكرونة', 'مكارونة', 'باريلا', 'سباغيتي'],
+    products: [
+      { name: 'مكرونة باريلا سباغيتي ٥٠٠ جم',         price:  9.50, image: '', url: '#' },
+      { name: 'مكرونة باريلا بيني ٥٠٠ جم',            price:  9.50, image: '', url: '#' },
+      { name: 'مكرونة ملوكي سباغيتي ٩٠٠ جم',          price:  5.95, image: '', url: '#' },
+      { name: 'مكرونة ماما سباغيتي ٤٠٠ جم',           price:  3.75, image: '', url: '#' },
+      { name: 'مكرونة المراعي فيتوتشيني ٥٠٠ جم',      price:  7.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['laundry', 'detergent', 'washing powder', 'مسحوق غسيل', 'ارييل', 'تايد', 'persil', 'ariel', 'tide'],
+    products: [
+      { name: 'مسحوق غسيل أريال أوتوماتيك ٣ كجم',     price: 39.95, image: '', url: '#' },
+      { name: 'مسحوق غسيل تايد بلاس ٤ كجم',           price: 45.50, image: '', url: '#' },
+      { name: 'مسحوق غسيل برسيل ملونات ٢.٥ كجم',      price: 34.95, image: '', url: '#' },
+      { name: 'مسحوق غسيل OMO نشط ٣ كجم',             price: 29.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['baby formula', 'infant formula', 'حليب اطفال', 'حليب أطفال', 'نان', 'سيميلاك', 'similac', 'nan', 'aptamil'],
+    products: [
+      { name: 'حليب نان أوبتيبرو ١ للرضع ٠-٦ أشهر ٩٠٠ جم',  price: 129.95, image: '', url: '#' },
+      { name: 'حليب سيميلاك أدفانس ١ للرضع ٩٠٠ جم',         price: 115.00, image: '', url: '#' },
+      { name: 'حليب أبتاميل ١ للرضع ٩٠٠ جم',                price: 135.00, image: '', url: '#' },
+      { name: 'حليب نان كومفورت ١ للرضع ٨٠٠ جم',            price: 119.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['juice', 'عصير', 'عصائر', 'المراعي عصير', 'راني', 'rani', 'almarai juice', 'تروبيكانا', 'tropicana'],
+    products: [
+      { name: 'عصير المراعي برتقال ١ لتر',              price:  7.50, image: '', url: '#' },
+      { name: 'عصير راني مانجو ١.٥ لتر',                price:  8.95, image: '', url: '#' },
+      { name: 'عصير تروبيكانا برتقال ١ لتر',            price: 14.95, image: '', url: '#' },
+      { name: 'عصير المراعي تفاح ١ لتر',                price:  7.50, image: '', url: '#' },
+      { name: 'عصير راني خوخ ٢٥٠ مل (٦ علب)',          price: 12.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['chips', 'snacks', 'crisps', 'شيبس', 'بطاطس', 'بطاطا', 'ليز', 'pringles', 'lays'],
+    products: [
+      { name: 'شيبس ليز كلاسيك ١٦٧ جم',               price: 12.95, image: '', url: '#' },
+      { name: 'شيبس برينجلز أوريجينال ١٦٥ جم',         price: 14.50, image: '', url: '#' },
+      { name: 'شيبس تام تام ببرونية ١٢٠ جم',           price:  6.95, image: '', url: '#' },
+      { name: 'شيبس ليز بالجبنة ١٦٧ جم',              price: 12.95, image: '', url: '#' },
+      { name: 'شيبس ميكسد نكهات متعددة ٢٤ كيس',       price: 29.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['tissues', 'paper towels', 'مناديل', 'كلينكس', 'ورق', 'kleenex', 'tissue', 'napkins'],
+    products: [
+      { name: 'مناديل كلينكس ناعمة ٢ طبقة ١٠٠ × ٤ علب', price: 19.95, image: '', url: '#' },
+      { name: 'مناديل ورقية عيش الغراب ٢٠٠ ورقة',      price:  7.50, image: '', url: '#' },
+      { name: 'مناديل كلينكس منثول ٦٠ ورقة',           price:  6.95, image: '', url: '#' },
+      { name: 'ورق مطبخ باون باور ٢ لفة',              price:  9.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['shampoo', 'شامبو', 'هيد اند شولدرز', 'head shoulders', 'pantene', 'pantin', 'dove shampoo'],
+    products: [
+      { name: 'شامبو هيد آند شولدرز ضد القشرة ٤٠٠ مل', price: 24.95, image: '', url: '#' },
+      { name: 'شامبو بانتين للشعر الجاف ٤٠٠ مل',       price: 22.50, image: '', url: '#' },
+      { name: 'شامبو داف موتشر ٤٠٠ مل',                price: 21.95, image: '', url: '#' },
+      { name: 'شامبو لوريال برو ليسيك ٤٠٠ مل',         price: 34.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['diapers', 'nappies', 'حفاضات', 'حفاضه', 'بامبرز', 'هاجيز', 'pampers', 'huggies'],
+    products: [
+      { name: 'حفاضات بامبرز مقاس ٤ (٩-١٤ كجم) ٤٤ حبة',    price: 69.95, image: '', url: '#' },
+      { name: 'حفاضات هاجيز ناتشرا كير مقاس ٤ ٤٢ حبة',     price: 64.95, image: '', url: '#' },
+      { name: 'حفاضات بامبرز نيو بيبي مقاس ٣ ٥٦ حبة',      price: 74.95, image: '', url: '#' },
+      { name: 'حفاضات هاجيز بلس مقاس ٥ ٣٦ حبة',            price: 59.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['canned', 'foul', 'hummus', 'tuna', 'فول', 'حمص', 'تونة', 'معلبات', 'فول مدمس'],
+    products: [
+      { name: 'فول مدمس السنونو ٤٠٠ جم',               price:  4.25, image: '', url: '#' },
+      { name: 'حمص بالطحينة شاميات ٤٠٠ جم',            price:  5.50, image: '', url: '#' },
+      { name: 'تونة بالزيت بيلاكو ١٧٠ جم',            price:  8.95, image: '', url: '#' },
+      { name: 'فول مدمس بالزيتون سيف ٤٠٠ جم',          price:  4.75, image: '', url: '#' },
+      { name: 'تونة باراميون بالماء ٣ × ١٧٠ جم',       price: 22.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['frozen', 'frozen meals', 'وجبات مجمدة', 'بيتزا مجمدة', 'مجمد', 'pizza frozen', 'frozen food'],
+    products: [
+      { name: 'بيتزا دكتور أوتكر مارغريتا مجمدة ٣٣٠ جم',  price: 24.95, image: '', url: '#' },
+      { name: 'برغر دجاج مجمد نادك ٤ قطع ٤٠٠ جم',         price: 29.95, image: '', url: '#' },
+      { name: 'سمبوسة لحم مجمدة ٢٠ قطعة ٤٠٠ جم',          price: 19.95, image: '', url: '#' },
+      { name: 'وجبة كبسة دجاج مجمدة كاملة ٨٠٠ جم',        price: 39.95, image: '', url: '#' },
+      { name: 'نقانق دجاج مجمد نادك ٤٠٠ جم',              price: 18.50, image: '', url: '#' },
+    ],
+  },
 ];
 
 // Default fallback (milk — most commonly searched)
