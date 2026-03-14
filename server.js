@@ -1059,6 +1059,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults);
+  recordPriceHistory(key, allResults);
   write('done', finalData);
   res.end();
 });
@@ -1142,6 +1143,15 @@ app.get('/api/trending', (req, res) => {
       lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
     }));
   res.json({ trending, total: analytics.totalSearches });
+});
+
+/* ─── GET /api/history — price history for a query ────────────── */
+app.get('/api/history', (req, res) => {
+  const query = (req.query.q || '').trim();
+  if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  const nKey = normalizeQuery(query);
+  const observations = priceHistory.get(nKey) || [];
+  res.json({ query, normalizedQuery: nKey, observations: observations.slice(-10) });
 });
 
 /* ─── GET /api/stats — business analytics ──────────────────────── */
