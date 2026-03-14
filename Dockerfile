@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
     libxrender1 \
     libxss1 \
     libxtst6 \
+    libxss1 \
     lsb-release \
     wget \
     xdg-utils \

@@ -41,6 +41,7 @@ async function getBrowser() {
         '--disable-blink-features=AutomationControlled',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--no-zygote',
         '--single-process',
       ],
     });
