@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Saudi Grocery Price Comparer | قارن أسعار البقالة</title>
+  <title>GroceryCompare SA | Real-Time Saudi Grocery Prices</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,9 +20,8 @@
       --border:      #d4e4d8;
       --shadow:      0 2px 12px rgba(26,122,74,0.10);
       --shadow-lg:   0 8px 32px rgba(26,122,74,0.15);
+      --red:         #e63946;
     }
-
-    html { scroll-behavior: smooth; }
 
     body {
       background: var(--bg);
@@ -31,18 +30,18 @@
       min-height: 100vh;
     }
 
-    /* ── HEADER ─────────────────────────────────────────── */
+    /* ── HEADER ───────────────────────────────────── */
     header {
       background: var(--green);
       color: #fff;
-      padding: 1.5rem 2rem;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+      padding: 1.25rem 2rem;
       position: sticky;
       top: 0;
       z-index: 100;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
     }
     .header-inner {
-      max-width: 960px;
+      max-width: 1000px;
       margin: 0 auto;
       display: flex;
       align-items: center;
@@ -52,164 +51,128 @@
     .logo {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
-      font-size: 1.4rem;
+      gap: 0.5rem;
+      font-size: 1.3rem;
       font-weight: 700;
-      letter-spacing: -0.02em;
       white-space: nowrap;
+      text-decoration: none;
+      color: #fff;
     }
-    .logo .emoji { font-size: 1.8rem; }
-    .logo .sub {
-      font-size: 0.65rem;
-      font-weight: 400;
-      opacity: 0.75;
-      display: block;
-      letter-spacing: 0.05em;
-    }
+    .logo-sub { font-size: 0.6rem; font-weight: 400; opacity: 0.7; display: block; }
 
-    /* ── SEARCH BAR ──────────────────────────────────────── */
     .search-wrap {
       flex: 1;
-      min-width: 240px;
+      min-width: 220px;
       position: relative;
     }
-    .search-wrap input {
+    #searchInput {
       width: 100%;
-      padding: 0.75rem 1rem 0.75rem 2.8rem;
+      padding: 0.7rem 3rem 0.7rem 1rem;
       border: none;
       border-radius: 10px;
       font-size: 1rem;
       font-family: inherit;
-      background: rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.18);
       color: #fff;
       outline: none;
-      transition: background 0.25s;
+      transition: background 0.2s;
     }
-    .search-wrap input::placeholder { color: rgba(255,255,255,0.6); }
-    .search-wrap input:focus { background: rgba(255,255,255,0.25); }
-    .search-icon {
+    #searchInput::placeholder { color: rgba(255,255,255,0.55); }
+    #searchInput:focus { background: rgba(255,255,255,0.28); }
+    .search-btn {
       position: absolute;
-      left: 0.8rem;
+      right: 0.4rem;
       top: 50%;
       transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      border: none;
+      border-radius: 7px;
+      color: #fff;
+      padding: 0.4rem 0.7rem;
       font-size: 1rem;
-      pointer-events: none;
-      opacity: 0.7;
-    }
-
-    /* ── AUTOCOMPLETE ────────────────────────────────────── */
-    .autocomplete-list {
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0; right: 0;
-      background: var(--card);
-      border-radius: 10px;
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-      z-index: 200;
-      display: none;
-    }
-    .autocomplete-list.open { display: block; }
-    .autocomplete-item {
-      padding: 0.65rem 1rem;
       cursor: pointer;
-      font-size: 0.95rem;
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      border-bottom: 1px solid var(--border);
-      transition: background 0.15s;
+      transition: background 0.2s;
     }
-    .autocomplete-item:last-child { border-bottom: none; }
-    .autocomplete-item:hover, .autocomplete-item.highlighted { background: var(--green-pale); }
-    .autocomplete-item .cat-badge {
-      font-size: 0.68rem;
-      background: var(--green-pale);
-      color: var(--green);
-      padding: 0.1rem 0.45rem;
-      border-radius: 20px;
-      font-weight: 500;
-      margin-left: auto;
-    }
+    .search-btn:hover { background: rgba(255,255,255,0.35); }
 
-    /* ── MAIN ────────────────────────────────────────────── */
+    /* ── STATUS BAR ───────────────────────────────── */
+    #status-bar {
+      display: none;
+      background: #fff9e6;
+      border-bottom: 1px solid #ffe88a;
+      padding: 0.5rem 2rem;
+      font-size: 0.82rem;
+      color: #7a5f00;
+      text-align: center;
+    }
+    #status-bar.visible { display: block; }
+
+    /* ── MAIN ─────────────────────────────────────── */
     main {
-      max-width: 960px;
+      max-width: 1000px;
       margin: 0 auto;
       padding: 2rem 1.5rem 4rem;
     }
 
-    /* ── FILTERS ─────────────────────────────────────────── */
-    .filters {
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-      margin-bottom: 1.5rem;
-      align-items: center;
-    }
-    .filter-label {
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-    .filter-btn {
-      padding: 0.38rem 0.9rem;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      font-size: 0.82rem;
-      font-family: inherit;
-      cursor: pointer;
-      background: var(--card);
-      color: var(--text-muted);
-      transition: all 0.2s;
-    }
-    .filter-btn.active {
-      background: var(--green);
-      color: #fff;
-      border-color: var(--green);
-    }
-    .filter-btn:hover:not(.active) { border-color: var(--green); color: var(--green); }
-
-    /* ── HERO PROMPT ─────────────────────────────────────── */
-    #hero-prompt {
+    /* ── HERO ─────────────────────────────────────── */
+    #hero {
       text-align: center;
-      padding: 4rem 2rem;
+      padding: 4rem 2rem 3rem;
     }
-    #hero-prompt .big-emoji { font-size: 4rem; margin-bottom: 1rem; display: block; }
-    #hero-prompt h2 {
-      font-size: 1.6rem;
-      font-weight: 600;
-      margin-bottom: 0.6rem;
-      color: var(--text);
-    }
-    #hero-prompt p { color: var(--text-muted); font-size: 1rem; line-height: 1.6; max-width: 420px; margin: 0 auto; }
-    .store-pills {
+    #hero .big-emoji { font-size: 4rem; display: block; margin-bottom: 1rem; }
+    #hero h2 { font-size: 1.7rem; font-weight: 600; margin-bottom: 0.6rem; }
+    #hero p  { color: var(--text-muted); max-width: 440px; margin: 0 auto 2rem; line-height: 1.65; }
+    .store-tags {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       gap: 0.5rem;
-      margin-top: 2rem;
+      margin-top: 1.5rem;
     }
-    .store-pill {
-      padding: 0.4rem 0.9rem;
+    .store-tag {
+      padding: 0.3rem 0.75rem;
       border-radius: 20px;
       font-size: 0.8rem;
       font-weight: 500;
       color: #fff;
     }
-
-    /* ── RESULTS HEADER ──────────────────────────────────── */
-    #results-header {
-      display: none;
-      margin-bottom: 1.5rem;
+    .tip {
+      margin-top: 2rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      background: var(--green-pale);
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
     }
-    #results-header.visible { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; }
-    #results-header h2 { font-size: 1.25rem; font-weight: 600; }
-    #results-header .count { font-size: 0.85rem; color: var(--text-muted); }
 
-    /* ── PRODUCT CARD ─────────────────────────────────────── */
-    .products-grid {
+    /* ── RESULTS HEADER ───────────────────────────── */
+    #results-bar {
+      display: none;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+    }
+    #results-bar.visible { display: flex; }
+    #results-bar h2 { font-size: 1.15rem; font-weight: 600; }
+    .results-meta { font-size: 0.82rem; color: var(--text-muted); }
+    .refresh-btn {
+      margin-left: auto;
+      padding: 0.35rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      font-family: inherit;
+      font-size: 0.82rem;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── PRODUCT RESULT CARD ──────────────────────── */
+    .results-grid {
       display: flex;
       flex-direction: column;
       gap: 1.25rem;
@@ -218,215 +181,245 @@
     .product-card {
       background: var(--card);
       border-radius: 16px;
+      border: 1px solid var(--border);
       box-shadow: var(--shadow);
       overflow: hidden;
-      border: 1px solid var(--border);
-      transition: box-shadow 0.25s;
+      transition: box-shadow 0.2s;
     }
     .product-card:hover { box-shadow: var(--shadow-lg); }
 
     .product-header {
       padding: 1.25rem 1.5rem 1rem;
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: flex-start;
       gap: 1rem;
-      border-bottom: 1px solid var(--border);
     }
-    .product-emoji { font-size: 2.2rem; flex-shrink: 0; }
-    .product-info { flex: 1; }
-    .product-name {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 0.2rem;
+    .product-img {
+      width: 70px;
+      height: 70px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      flex-shrink: 0;
     }
-    .product-meta {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      display: flex;
-      gap: 0.75rem;
-      flex-wrap: wrap;
-    }
-    .product-meta span { display: flex; align-items: center; gap: 0.25rem; }
-    .product-category {
+    .product-img-placeholder {
+      width: 70px;
+      height: 70px;
+      border-radius: 10px;
       background: var(--green-pale);
-      color: var(--green);
-      padding: 0.2rem 0.6rem;
-      border-radius: 20px;
-      font-size: 0.72rem;
-      font-weight: 600;
-    }
-    .best-badge {
-      background: var(--accent);
-      color: #fff;
-      padding: 0.2rem 0.65rem;
-      border-radius: 20px;
-      font-size: 0.72rem;
-      font-weight: 700;
-      white-space: nowrap;
-      align-self: flex-start;
-    }
-
-    /* ── PRICE TABLE ─────────────────────────────────────── */
-    .price-table {
-      padding: 0.75rem 1.5rem 1.25rem;
-    }
-    .price-row {
-      display: flex;
-      align-items: center;
-      padding: 0.55rem 0;
-      border-bottom: 1px solid var(--border);
-      gap: 0.75rem;
-      transition: background 0.15s;
-      border-radius: 8px;
-    }
-    .price-row:last-child { border-bottom: none; }
-    .price-row.cheapest {
-      background: var(--green-pale);
-      padding: 0.55rem 0.75rem;
-      margin: 0 -0.75rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .price-row.cheapest:last-child { border-bottom: none; }
-    .price-row.unavailable { opacity: 0.45; }
-
-    .store-logo {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+      border: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 2rem;
+      flex-shrink: 0;
+    }
+    .product-info { flex: 1; min-width: 0; }
+    .product-name {
+      font-size: 1.05rem;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 0.35rem;
+      /* truncate long names */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .product-source {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+    .product-source a {
+      color: var(--green);
+      text-decoration: none;
+    }
+    .product-source a:hover { text-decoration: underline; }
+    .best-price-badge {
+      background: var(--accent);
+      color: #fff;
+      padding: 0.25rem 0.7rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+      align-self: flex-start;
+      flex-shrink: 0;
+    }
+
+    /* ── PRICE COMPARISON TABLE ───────────────────── */
+    .price-table { padding: 0.5rem 1.5rem 1.25rem; }
+    .price-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.5rem 0.6rem;
+      border-radius: 8px;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+    .price-row:last-child { border-bottom: none; }
+    .price-row.cheapest  { background: var(--green-pale); }
+    .price-row.no-result { opacity: 0.4; }
+
+    .store-icon {
+      width: 32px; height: 32px;
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
       font-size: 1.1rem;
       flex-shrink: 0;
     }
-    .store-name {
-      flex: 1;
-      font-size: 0.9rem;
-      font-weight: 500;
+    .store-label {
+      min-width: 130px;
+      flex-shrink: 0;
     }
-    .store-name .store-ar {
-      display: block;
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      font-weight: 400;
-    }
+    .store-label .en { font-size: 0.88rem; font-weight: 500; }
+    .store-label .ar { font-size: 0.7rem; color: var(--text-muted); }
 
-    .price-bar-wrap {
-      flex: 2;
+    .bar-wrap {
+      flex: 1;
       height: 6px;
       background: var(--border);
       border-radius: 3px;
       overflow: hidden;
     }
-    .price-bar {
+    .bar-fill {
       height: 100%;
       border-radius: 3px;
       background: var(--green-light);
-      transition: width 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+      transition: width 0.7s cubic-bezier(0.23,1,0.32,1);
     }
-    .price-row.cheapest .price-bar { background: var(--accent); }
+    .price-row.cheapest .bar-fill { background: var(--accent); }
 
-    .price-value {
-      font-size: 0.95rem;
+    .price-val {
+      min-width: 80px;
+      text-align: right;
+      font-size: 0.92rem;
       font-weight: 700;
-      color: var(--text);
-      min-width: 68px;
-      text-align: right;
     }
-    .price-row.cheapest .price-value { color: var(--accent); }
-    .price-value .sar { font-size: 0.72rem; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
-    .price-unavailable {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      min-width: 68px;
-      text-align: right;
-    }
-
-    .cheapest-tag {
-      font-size: 0.65rem;
+    .price-row.cheapest .price-val { color: var(--accent); }
+    .sar { font-size: 0.7rem; font-weight: 400; color: var(--text-muted); }
+    .no-price { font-size: 0.8rem; color: var(--text-muted); min-width: 80px; text-align: right; }
+    .best-tag {
+      font-size: 0.62rem;
       background: var(--accent);
       color: #fff;
-      padding: 0.1rem 0.4rem;
+      padding: 0.1rem 0.38rem;
       border-radius: 4px;
       font-weight: 700;
       flex-shrink: 0;
     }
 
-    /* ── SAVINGS STRIP ───────────────────────────────────── */
+    /* ── SAVINGS STRIP ────────────────────────────── */
     .savings-strip {
-      background: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
+      background: linear-gradient(135deg, #1a7a4a, #26a865);
       color: #fff;
-      padding: 0.65rem 1.5rem;
+      padding: 0.6rem 1.5rem;
       font-size: 0.82rem;
       display: flex;
       align-items: center;
       gap: 0.5rem;
     }
-    .savings-strip strong { font-weight: 700; }
 
-    /* ── NO RESULTS ──────────────────────────────────────── */
+    /* ── LOADING STATE ────────────────────────────── */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 4rem 2rem;
+    }
+    #loading.visible { display: block; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      margin: 0 auto 1.25rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: var(--text-muted); font-size: 0.95rem; }
+    #loading .stores-progress {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+    }
+    .store-progress-pill {
+      padding: 0.3rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      color: #fff;
+      opacity: 0.4;
+      transition: opacity 0.4s;
+    }
+    .store-progress-pill.done { opacity: 1; }
+
+    /* ── ERROR ────────────────────────────────────── */
+    #error-box {
+      display: none;
+      background: #fff5f5;
+      border: 1px solid #fca5a5;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    #error-box.visible { display: block; }
+    #error-box h3 { color: var(--red); margin-bottom: 0.5rem; }
+    #error-box p  { font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; }
+    #error-box code {
+      display: block;
+      background: #fee2e2;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-size: 0.82rem;
+      margin-top: 0.75rem;
+      text-align: left;
+    }
+
+    /* ── NO RESULTS ───────────────────────────────── */
     #no-results {
       display: none;
       text-align: center;
-      padding: 3rem 2rem;
+      padding: 3rem;
       color: var(--text-muted);
     }
     #no-results.visible { display: block; }
-    #no-results .emoji { font-size: 3rem; margin-bottom: 1rem; display: block; }
 
-    /* ── CATEGORY PILLS ──────────────────────────────────── */
-    .category-chips {
+    /* ── STORE FILTER ─────────────────────────────── */
+    .store-filter {
       display: flex;
       gap: 0.5rem;
       flex-wrap: wrap;
-      margin-bottom: 2rem;
+      margin-bottom: 1.25rem;
     }
-    .cat-chip {
-      padding: 0.42rem 0.9rem;
+    .sf-btn {
+      padding: 0.32rem 0.8rem;
       border-radius: 20px;
-      font-size: 0.82rem;
-      font-weight: 500;
-      cursor: pointer;
-      background: var(--card);
       border: 1px solid var(--border);
+      background: var(--card);
+      font-family: inherit;
+      font-size: 0.78rem;
+      cursor: pointer;
       color: var(--text-muted);
       transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
     }
-    .cat-chip.active {
+    .sf-btn.active {
       background: var(--green);
-      color: #fff;
       border-color: var(--green);
+      color: #fff;
     }
-    .cat-chip:hover:not(.active) { border-color: var(--green); color: var(--green); }
-
-    /* ── SORT SELECT ─────────────────────────────────────── */
-    .sort-select {
-      padding: 0.42rem 0.75rem;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-family: inherit;
-      font-size: 0.82rem;
-      color: var(--text);
-      background: var(--card);
-      cursor: pointer;
-      outline: none;
-      margin-left: auto;
+    .sf-btn:hover:not(.active) { border-color: var(--green); color: var(--green); }
+    .sf-btn .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 4px;
     }
-    .sort-select:focus { border-color: var(--green); }
 
-    /* ── LOADING SHIMMER ─────────────────────────────────── */
-    .shimmer {
-      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.2s infinite;
-      border-radius: 8px;
-    }
-    @keyframes shimmer { to { background-position: -200% 0; } }
-
-    /* ── FOOTER ──────────────────────────────────────────── */
     footer {
       text-align: center;
       padding: 2rem;
@@ -436,8 +429,8 @@
     }
 
     @media (max-width: 600px) {
-      .price-bar-wrap { display: none; }
-      .product-header { flex-wrap: wrap; }
+      .bar-wrap { display: none; }
+      .store-label { min-width: 100px; }
     }
   </style>
 </head>
@@ -445,583 +438,343 @@
 
 <header>
   <div class="header-inner">
-    <div class="logo">
-      <span class="emoji">🛒</span>
+    <a class="logo" href="/">
+      🛒
       <div>
         GroceryCompare SA
-        <span class="sub">قارن أسعار البقالة في السعودية</span>
+        <span class="logo-sub">Real-time Saudi grocery prices</span>
       </div>
-    </div>
+    </a>
     <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input
-        id="searchInput"
-        type="text"
-        placeholder="Search product... e.g. milk, rice, chicken"
-        autocomplete="off"
-      />
-      <div class="autocomplete-list" id="autocompleteList"></div>
+      <input id="searchInput" type="text"
+             placeholder="Search product (e.g. milk, rice, chicken)…"
+             autocomplete="off" />
+      <button class="search-btn" id="searchBtn" title="Search">🔍</button>
     </div>
   </div>
 </header>
 
+<div id="status-bar"></div>
+
 <main>
 
-  <!-- HERO PROMPT -->
-  <div id="hero-prompt">
+  <!-- HERO -->
+  <div id="hero">
     <span class="big-emoji">🧺</span>
     <h2>Find the Best Grocery Prices in Saudi Arabia</h2>
-    <p>Type any product name above to instantly compare prices across all major Saudi grocery stores.</p>
-    <div class="store-pills" id="storePills"></div>
+    <p>Type any product name and we'll instantly scrape live prices from all major Saudi grocery stores.</p>
+    <div class="store-tags" id="storeTags"></div>
+    <div class="tip">⚡ Powered by real-time web scraping — prices fetched live from each store</div>
   </div>
 
-  <!-- FILTERS + SORT (hidden until results) -->
-  <div id="filters-row" style="display:none;">
-    <div class="category-chips" id="categoryChips"></div>
-    <div class="filters">
-      <span class="filter-label">Sort by:</span>
-      <select class="sort-select" id="sortSelect">
-        <option value="price-asc">Price: Low to High</option>
-        <option value="price-desc">Price: High to Low</option>
-        <option value="name">Name A–Z</option>
-        <option value="savings">Biggest Savings</option>
-      </select>
-    </div>
+  <!-- LOADING -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <p id="loading-text">Fetching live prices from all stores…</p>
+    <div class="stores-progress" id="storesProgress"></div>
   </div>
 
-  <!-- RESULTS HEADER -->
-  <div id="results-header">
-    <h2 id="results-title">Results</h2>
-    <span class="count" id="results-count"></span>
+  <!-- ERROR -->
+  <div id="error-box">
+    <h3>⚠️ Could not connect to the scraper server</h3>
+    <p>Make sure the backend is running on your machine:</p>
+    <code>cd /path/to/project &amp;&amp; node server.js</code>
   </div>
 
-  <!-- PRODUCT GRID -->
-  <div class="products-grid" id="productsGrid"></div>
+  <!-- RESULTS BAR -->
+  <div id="results-bar">
+    <h2 id="results-title"></h2>
+    <span class="results-meta" id="results-meta"></span>
+    <button class="refresh-btn" id="refreshBtn">🔄 Refresh prices</button>
+  </div>
+
+  <!-- STORE FILTER -->
+  <div class="store-filter" id="storeFilter" style="display:none;"></div>
+
+  <!-- RESULTS -->
+  <div class="results-grid" id="resultsGrid"></div>
 
   <!-- NO RESULTS -->
   <div id="no-results">
-    <span class="emoji">😕</span>
-    <p>No products found for "<span id="no-results-query"></span>".<br>Try a different search term.</p>
+    <span style="font-size:2.5rem">😕</span>
+    <p style="margin-top:0.75rem">No products found for "<span id="noResultsQuery"></span>".<br>Try a different search term.</p>
   </div>
 
 </main>
 
 <footer>
-  Prices are indicative samples — last updated March 2026. Always verify at store websites.
-  &nbsp;|&nbsp; GroceryCompare SA &nbsp;🇸🇦
+  Prices are scraped live — always verify final price at checkout. &nbsp;|&nbsp; GroceryCompare SA 🇸🇦
 </footer>
 
 <script>
-/* ══════════════════════════════════════════════════════════
-   DATA
-══════════════════════════════════════════════════════════ */
-
+/* ═══════════════════════════════════════════════════════
+   STORE DEFINITIONS (mirrors server.js)
+═══════════════════════════════════════════════════════ */
 const STORES = [
-  { id: 'panda',     name: 'Panda',           ar: 'بنده',           emoji: '🐼', color: '#e63946' },
-  { id: 'tamimi',    name: 'Tamimi Markets',  ar: 'التميمي',        emoji: '🏪', color: '#457b9d' },
-  { id: 'danube',    name: 'Danube',          ar: 'دانوب',          emoji: '🔵', color: '#1d3557' },
-  { id: 'carrefour', name: 'Carrefour',       ar: 'كارفور',         emoji: '🔴', color: '#e63946' },
-  { id: 'othaim',    name: 'Othaim',          ar: 'العثيم',         emoji: '🟡', color: '#f4a261' },
-  { id: 'lulu',      name: 'LuLu Hypermarket',ar: 'لولو',           emoji: '🟢', color: '#2a9d8f' },
-  { id: 'bindawood', name: 'Bin Dawood',      ar: 'بن داود',        emoji: '🟠', color: '#e76f51' },
-  { id: 'noon',      name: 'Noon Daily',      ar: 'نون',            emoji: '⚫', color: '#f9c74f' },
+  { id: 'noon',      name: 'Noon Daily',        ar: 'نون',     emoji: '⚫', color: '#f9a825' },
+  { id: 'carrefour', name: 'Carrefour',          ar: 'كارفور', emoji: '🔴', color: '#003087' },
+  { id: 'panda',     name: 'Panda',              ar: 'بنده',   emoji: '🐼', color: '#e63946' },
+  { id: 'danube',    name: 'Danube',             ar: 'دانوب', emoji: '🔵', color: '#1d3557' },
+  { id: 'lulu',      name: 'LuLu Hypermarket',   ar: 'لولو',  emoji: '🟢', color: '#2a9d8f' },
+  { id: 'tamimi',    name: 'Tamimi Markets',     ar: 'التميمي', emoji: '🏪', color: '#457b9d' },
+  { id: 'othaim',    name: 'Othaim',             ar: 'العثيم', emoji: '🟡', color: '#f4a261' },
+  { id: 'bindawood', name: 'Bin Dawood',         ar: 'بن داود', emoji: '🟠', color: '#e76f51' },
 ];
 
-// Price: null = not available at this store
-const PRODUCTS = [
-  // ── DAIRY ─────────────────────────────────────────────
-  {
-    id: 1, name: 'Almarai Full Fat Milk 2L', ar: 'حليب المراعي كامل الدسم ٢ لتر',
-    category: 'Dairy', emoji: '🥛', unit: '2L',
-    prices: { panda:8.75, tamimi:8.95, danube:8.50, carrefour:8.95, othaim:8.75, lulu:8.50, bindawood:9.00, noon:8.25 }
-  },
-  {
-    id: 2, name: 'Nadec Low Fat Milk 1L', ar: 'حليب نادك قليل الدسم ١ لتر',
-    category: 'Dairy', emoji: '🥛', unit: '1L',
-    prices: { panda:4.25, tamimi:4.50, danube:4.25, carrefour:4.75, othaim:4.50, lulu:4.25, bindawood:4.50, noon:null }
-  },
-  {
-    id: 3, name: 'Almarai Cheddar Cheese 500g', ar: 'جبن شيدر المراعي ٥٠٠ جم',
-    category: 'Dairy', emoji: '🧀', unit: '500g',
-    prices: { panda:18.95, tamimi:19.50, danube:18.75, carrefour:19.25, othaim:18.95, lulu:18.50, bindawood:19.75, noon:18.25 }
-  },
-  {
-    id: 4, name: 'Almarai Greek Yogurt 400g', ar: 'زبادي يوناني المراعي ٤٠٠ جم',
-    category: 'Dairy', emoji: '🥣', unit: '400g',
-    prices: { panda:8.50, tamimi:8.75, danube:8.25, carrefour:8.95, othaim:8.50, lulu:8.25, bindawood:9.00, noon:8.00 }
-  },
-  {
-    id: 5, name: 'Almarai Butter 200g', ar: 'زبدة المراعي ٢٠٠ جم',
-    category: 'Dairy', emoji: '🧈', unit: '200g',
-    prices: { panda:10.25, tamimi:10.50, danube:10.00, carrefour:10.75, othaim:10.25, lulu:10.00, bindawood:10.75, noon:null }
-  },
+const API = 'http://localhost:3000/api';
 
-  // ── EGGS ──────────────────────────────────────────────
-  {
-    id: 6, name: 'White Eggs 30 pcs', ar: 'بيض أبيض ٣٠ حبة',
-    category: 'Eggs & Poultry', emoji: '🥚', unit: '30 pcs',
-    prices: { panda:14.95, tamimi:15.50, danube:14.75, carrefour:15.25, othaim:14.50, lulu:14.75, bindawood:15.00, noon:14.25 }
-  },
-  {
-    id: 7, name: 'Brown Eggs 15 pcs', ar: 'بيض بني ١٥ حبة',
-    category: 'Eggs & Poultry', emoji: '🥚', unit: '15 pcs',
-    prices: { panda:9.95, tamimi:10.25, danube:9.75, carrefour:10.50, othaim:9.75, lulu:9.50, bindawood:10.25, noon:null }
-  },
-
-  // ── MEAT & POULTRY ─────────────────────────────────────
-  {
-    id: 8, name: 'Whole Chicken (Fresh) ~1.2kg', ar: 'دجاج كامل طازج ~١.٢ كجم',
-    category: 'Eggs & Poultry', emoji: '🍗', unit: 'per kg',
-    prices: { panda:17.95, tamimi:18.50, danube:17.75, carrefour:18.25, othaim:17.50, lulu:17.75, bindawood:18.50, noon:null }
-  },
-  {
-    id: 9, name: 'Chicken Breast Fillet 1kg', ar: 'صدور دجاج منزوع العظم ١ كجم',
-    category: 'Eggs & Poultry', emoji: '🍗', unit: '1kg',
-    prices: { panda:24.95, tamimi:25.50, danube:24.75, carrefour:25.25, othaim:24.50, lulu:24.00, bindawood:25.75, noon:null }
-  },
-  {
-    id: 10, name: 'Ground Beef 500g', ar: 'لحم بقري مفروم ٥٠٠ جم',
-    category: 'Meat', emoji: '🥩', unit: '500g',
-    prices: { panda:28.50, tamimi:29.00, danube:28.25, carrefour:29.50, othaim:27.95, lulu:28.50, bindawood:29.25, noon:null }
-  },
-
-  // ── RICE & GRAINS ──────────────────────────────────────
-  {
-    id: 11, name: 'Basmati Rice 5kg', ar: 'أرز بسمتي ٥ كجم',
-    category: 'Rice & Grains', emoji: '🍚', unit: '5kg',
-    prices: { panda:29.95, tamimi:31.00, danube:29.75, carrefour:30.50, othaim:28.95, lulu:29.50, bindawood:31.00, noon:28.50 }
-  },
-  {
-    id: 12, name: 'Saudi Rice 10kg', ar: 'أرز سعودي ١٠ كجم',
-    category: 'Rice & Grains', emoji: '🍚', unit: '10kg',
-    prices: { panda:54.95, tamimi:56.50, danube:54.75, carrefour:55.50, othaim:53.95, lulu:54.50, bindawood:56.00, noon:null }
-  },
-  {
-    id: 13, name: 'Wheat Flour 5kg', ar: 'دقيق قمح ٥ كجم',
-    category: 'Rice & Grains', emoji: '🌾', unit: '5kg',
-    prices: { panda:12.50, tamimi:13.00, danube:12.25, carrefour:12.95, othaim:12.25, lulu:12.50, bindawood:13.25, noon:12.00 }
-  },
-
-  // ── BREAD ─────────────────────────────────────────────
-  {
-    id: 14, name: 'L\'usine White Toast Bread', ar: 'خبز توست أبيض لوزين',
-    category: 'Bread & Bakery', emoji: '🍞', unit: '600g',
-    prices: { panda:5.95, tamimi:6.25, danube:5.75, carrefour:6.25, othaim:5.95, lulu:5.75, bindawood:6.25, noon:5.50 }
-  },
-  {
-    id: 15, name: 'Whole Wheat Bread 600g', ar: 'خبز قمح كامل ٦٠٠ جم',
-    category: 'Bread & Bakery', emoji: '🍞', unit: '600g',
-    prices: { panda:7.50, tamimi:7.75, danube:7.25, carrefour:7.95, othaim:7.25, lulu:7.50, bindawood:7.75, noon:7.00 }
-  },
-
-  // ── OILS & CONDIMENTS ──────────────────────────────────
-  {
-    id: 16, name: 'Afia Sunflower Oil 1.8L', ar: 'زيت عباد الشمس عافية ١.٨ لتر',
-    category: 'Oils & Cooking', emoji: '🫙', unit: '1.8L',
-    prices: { panda:14.95, tamimi:15.50, danube:14.75, carrefour:15.25, othaim:14.75, lulu:14.50, bindawood:15.50, noon:14.25 }
-  },
-  {
-    id: 17, name: 'Shams Vegetable Oil 4L', ar: 'زيت نباتي شمس ٤ لتر',
-    category: 'Oils & Cooking', emoji: '🫙', unit: '4L',
-    prices: { panda:26.50, tamimi:27.25, danube:26.25, carrefour:27.00, othaim:25.95, lulu:26.50, bindawood:27.25, noon:null }
-  },
-  {
-    id: 18, name: 'Heinz Tomato Ketchup 570g', ar: 'كاتشب هاينز طماطم ٥٧٠ جم',
-    category: 'Oils & Cooking', emoji: '🍅', unit: '570g',
-    prices: { panda:11.95, tamimi:12.25, danube:11.75, carrefour:12.50, othaim:11.75, lulu:11.50, bindawood:12.25, noon:11.25 }
-  },
-
-  // ── BEVERAGES ─────────────────────────────────────────
-  {
-    id: 19, name: 'Almarai Orange Juice 1L', ar: 'عصير برتقال المراعي ١ لتر',
-    category: 'Beverages', emoji: '🥤', unit: '1L',
-    prices: { panda:8.75, tamimi:9.00, danube:8.50, carrefour:9.25, othaim:8.75, lulu:8.50, bindawood:9.00, noon:8.25 }
-  },
-  {
-    id: 20, name: 'Pepsi 2L', ar: 'بيبسي ٢ لتر',
-    category: 'Beverages', emoji: '🥤', unit: '2L',
-    prices: { panda:4.50, tamimi:4.75, danube:4.25, carrefour:4.95, othaim:4.50, lulu:4.50, bindawood:4.75, noon:4.25 }
-  },
-  {
-    id: 21, name: 'Nescafé Classic 200g', ar: 'نسكافيه كلاسيك ٢٠٠ جم',
-    category: 'Beverages', emoji: '☕', unit: '200g',
-    prices: { panda:34.95, tamimi:35.50, danube:34.75, carrefour:36.00, othaim:34.50, lulu:34.75, bindawood:35.75, noon:33.95 }
-  },
-  {
-    id: 22, name: 'Lipton Yellow Label Tea 100 bags', ar: 'شاي ليبتون صفراء ١٠٠ كيس',
-    category: 'Beverages', emoji: '🍵', unit: '100 bags',
-    prices: { panda:14.95, tamimi:15.50, danube:14.75, carrefour:15.25, othaim:14.75, lulu:14.50, bindawood:15.50, noon:14.25 }
-  },
-
-  // ── FRESH PRODUCE ──────────────────────────────────────
-  {
-    id: 23, name: 'Tomatoes (Fresh)', ar: 'طماطم طازجة',
-    category: 'Fresh Produce', emoji: '🍅', unit: 'per kg',
-    prices: { panda:3.95, tamimi:4.25, danube:3.75, carrefour:4.50, othaim:3.75, lulu:3.50, bindawood:4.25, noon:null }
-  },
-  {
-    id: 24, name: 'Potatoes', ar: 'بطاطس',
-    category: 'Fresh Produce', emoji: '🥔', unit: 'per kg',
-    prices: { panda:2.95, tamimi:3.25, danube:2.75, carrefour:3.25, othaim:2.75, lulu:2.50, bindawood:3.25, noon:null }
-  },
-  {
-    id: 25, name: 'Bananas', ar: 'موز',
-    category: 'Fresh Produce', emoji: '🍌', unit: 'per kg',
-    prices: { panda:5.50, tamimi:5.75, danube:5.25, carrefour:5.95, othaim:5.25, lulu:5.00, bindawood:5.75, noon:null }
-  },
-  {
-    id: 26, name: 'Onions', ar: 'بصل',
-    category: 'Fresh Produce', emoji: '🧅', unit: 'per kg',
-    prices: { panda:2.25, tamimi:2.50, danube:2.00, carrefour:2.50, othaim:2.00, lulu:1.95, bindawood:2.50, noon:null }
-  },
-  {
-    id: 27, name: 'Garlic 250g', ar: 'ثوم ٢٥٠ جم',
-    category: 'Fresh Produce', emoji: '🧄', unit: '250g',
-    prices: { panda:4.50, tamimi:4.75, danube:4.25, carrefour:4.95, othaim:4.25, lulu:4.25, bindawood:4.75, noon:null }
-  },
-
-  // ── SNACKS ────────────────────────────────────────────
-  {
-    id: 28, name: 'Lays Classic Chips 167g', ar: 'شيبس ليز كلاسيك ١٦٧ جم',
-    category: 'Snacks', emoji: '🥔', unit: '167g',
-    prices: { panda:9.95, tamimi:10.25, danube:9.75, carrefour:10.50, othaim:9.75, lulu:9.75, bindawood:10.25, noon:9.50 }
-  },
-  {
-    id: 29, name: 'Pringles Original 165g', ar: 'برينغلز أوريجينال ١٦٥ جم',
-    category: 'Snacks', emoji: '🥔', unit: '165g',
-    prices: { panda:12.95, tamimi:13.25, danube:12.75, carrefour:13.50, othaim:12.75, lulu:12.75, bindawood:13.25, noon:12.50 }
-  },
-
-  // ── CLEANING ─────────────────────────────────────────
-  {
-    id: 30, name: 'Ariel Detergent 3kg', ar: 'مسحوق أريال ٣ كجم',
-    category: 'Household', emoji: '🧺', unit: '3kg',
-    prices: { panda:34.95, tamimi:35.75, danube:34.75, carrefour:36.00, othaim:34.50, lulu:34.75, bindawood:35.75, noon:33.95 }
-  },
-  {
-    id: 31, name: 'Fairy Dish Soap 750ml', ar: 'فيري سائل غسيل الصحون ٧٥٠ مل',
-    category: 'Household', emoji: '🫧', unit: '750ml',
-    prices: { panda:12.50, tamimi:12.75, danube:12.25, carrefour:12.95, othaim:12.25, lulu:12.00, bindawood:12.75, noon:11.95 }
-  },
-  {
-    id: 32, name: 'Pampers Diapers Size 4 (44 pcs)', ar: 'حفاضات بامبرز مقاس ٤ (٤٤ حبة)',
-    category: 'Baby', emoji: '👶', unit: '44 pcs',
-    prices: { panda:54.95, tamimi:55.75, danube:54.75, carrefour:56.50, othaim:54.50, lulu:54.75, bindawood:55.75, noon:53.95 }
-  },
-
-  // ── SUGAR & SWEETS ────────────────────────────────────
-  {
-    id: 33, name: 'Al-Wafi Sugar 2kg', ar: 'سكر الوافي ٢ كجم',
-    category: 'Pantry', emoji: '🍬', unit: '2kg',
-    prices: { panda:7.50, tamimi:7.75, danube:7.25, carrefour:7.95, othaim:7.25, lulu:7.00, bindawood:7.75, noon:6.95 }
-  },
-  {
-    id: 34, name: 'Nutella 750g', ar: 'نوتيلا ٧٥٠ جم',
-    category: 'Pantry', emoji: '🍫', unit: '750g',
-    prices: { panda:29.95, tamimi:30.50, danube:29.75, carrefour:30.95, othaim:29.75, lulu:29.50, bindawood:30.75, noon:29.25 }
-  },
-  {
-    id: 35, name: 'Dates Medjool 500g', ar: 'تمر مجدول ٥٠٠ جم',
-    category: 'Pantry', emoji: '🌴', unit: '500g',
-    prices: { panda:38.95, tamimi:40.00, danube:38.75, carrefour:39.95, othaim:38.50, lulu:38.75, bindawood:40.00, noon:37.95 }
-  },
-
-  // ── FROZEN ────────────────────────────────────────────
-  {
-    id: 36, name: 'McCain French Fries 2.5kg', ar: 'بطاطس ماكين مجمدة ٢.٥ كجم',
-    category: 'Frozen', emoji: '🍟', unit: '2.5kg',
-    prices: { panda:22.95, tamimi:23.50, danube:22.75, carrefour:23.75, othaim:22.50, lulu:22.75, bindawood:23.50, noon:22.25 }
-  },
-  {
-    id: 37, name: 'Igloo Fish Fingers 400g', ar: 'إيغلو أصابع سمك ٤٠٠ جم',
-    category: 'Frozen', emoji: '🐟', unit: '400g',
-    prices: { panda:18.95, tamimi:19.50, danube:18.75, carrefour:19.25, othaim:18.75, lulu:18.50, bindawood:19.50, noon:18.25 }
-  },
-];
-
-const CATEGORIES = [...new Set(PRODUCTS.map(p => p.category))].sort();
-
-/* ══════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    STATE
-══════════════════════════════════════════════════════════ */
-let currentQuery    = '';
-let currentCategory = 'All';
-let currentSort     = 'price-asc';
-let filteredProducts = [];
+═══════════════════════════════════════════════════════ */
+let lastData          = null;
+let currentQuery      = '';
+let activeStoreFilter = 'all';
 
-/* ══════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    HELPERS
-══════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════════ */
 function storeById(id) { return STORES.find(s => s.id === id); }
 
-function availablePrices(product) {
-  return STORES
-    .map(s => ({ store: s, price: product.prices[s.id] }))
-    .filter(r => r.price !== null && r.price !== undefined);
+function show(id)  { document.getElementById(id).classList.add('visible'); }
+function hide(id)  { document.getElementById(id).classList.remove('visible'); }
+function el(id)    { return document.getElementById(id); }
+
+function setStatus(msg) {
+  el('status-bar').textContent = msg;
+  el('status-bar').classList.toggle('visible', !!msg);
 }
 
-function minPrice(product)  { const p = availablePrices(product); return p.length ? Math.min(...p.map(r => r.price)) : null; }
-function maxPrice(product)  { const p = availablePrices(product); return p.length ? Math.max(...p.map(r => r.price)) : null; }
-function savings(product)   { const mn = minPrice(product), mx = maxPrice(product); return (mn && mx) ? mx - mn : 0; }
+/* ═══════════════════════════════════════════════════════
+   HERO STORE TAGS
+═══════════════════════════════════════════════════════ */
+el('storeTags').innerHTML = STORES.map(s =>
+  `<span class="store-tag" style="background:${s.color}">${s.emoji} ${s.name}</span>`
+).join('');
 
-function formatPrice(n) {
-  return n.toFixed(2);
-}
+/* ═══════════════════════════════════════════════════════
+   SEARCH
+═══════════════════════════════════════════════════════ */
+async function search(query) {
+  if (!query.trim()) return;
+  currentQuery = query.trim();
 
-/* ══════════════════════════════════════════════════════════
-   SEARCH / FILTER / SORT
-══════════════════════════════════════════════════════════ */
-function getResults() {
-  let results = PRODUCTS;
+  // Switch UI to loading state
+  el('hero').style.display   = 'none';
+  el('loading').style.display = 'block';
+  hide('results-bar');
+  hide('no-results');
+  hide('error-box');
+  el('storeFilter').style.display = 'none';
+  el('resultsGrid').innerHTML = '';
 
-  if (currentCategory !== 'All') {
-    results = results.filter(p => p.category === currentCategory);
-  }
-
-  if (currentQuery.trim()) {
-    const q = currentQuery.toLowerCase();
-    results = results.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      p.ar.includes(q) ||
-      p.category.toLowerCase().includes(q)
-    );
-  }
-
-  // Sort
-  if (currentSort === 'price-asc')  results = [...results].sort((a, b) => (minPrice(a)||999) - (minPrice(b)||999));
-  if (currentSort === 'price-desc') results = [...results].sort((a, b) => (minPrice(b)||0) - (minPrice(a)||0));
-  if (currentSort === 'name')       results = [...results].sort((a, b) => a.name.localeCompare(b.name));
-  if (currentSort === 'savings')    results = [...results].sort((a, b) => savings(b) - savings(a));
-
-  return results;
-}
-
-/* ══════════════════════════════════════════════════════════
-   RENDER
-══════════════════════════════════════════════════════════ */
-function renderHero(show) {
-  document.getElementById('hero-prompt').style.display = show ? 'block' : 'none';
-  document.getElementById('filters-row').style.display = show ? 'none' : 'block';
-  const rh = document.getElementById('results-header');
-  if (show) rh.classList.remove('visible'); else rh.classList.add('visible');
-}
-
-function renderCategoryChips() {
-  const el = document.getElementById('categoryChips');
-  const cats = ['All', ...CATEGORIES];
-  el.innerHTML = cats.map(c =>
-    `<div class="cat-chip ${c === currentCategory ? 'active' : ''}" data-cat="${c}">
-      ${c === 'All' ? '🛒 All Categories' : c}
-    </div>`
+  // Animate store pills
+  el('storesProgress').innerHTML = STORES.map(s =>
+    `<span class="store-progress-pill" id="pill-${s.id}" style="background:${s.color}">${s.emoji} ${s.name}</span>`
   ).join('');
-  el.querySelectorAll('.cat-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      currentCategory = chip.dataset.cat;
-      renderAll();
+
+  // Fake progressive reveal (server does it all at once but UX feels better)
+  const revealTimer = setInterval(() => {
+    const pending = [...document.querySelectorAll('.store-progress-pill:not(.done)')];
+    if (pending.length) pending[0].classList.add('done');
+  }, 600);
+
+  try {
+    const res = await fetch(`${API}/search?q=${encodeURIComponent(currentQuery)}`);
+    clearInterval(revealTimer);
+
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    const data = await res.json();
+    lastData = data;
+
+    renderResults(data);
+  } catch (err) {
+    clearInterval(revealTimer);
+    el('loading').style.display = 'none';
+    show('error-box');
+    console.error(err);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER RESULTS
+═══════════════════════════════════════════════════════ */
+function renderResults(data) {
+  el('loading').style.display = 'none';
+
+  const storesWithProducts = data.stores.filter(s => s.products.length > 0);
+
+  if (!storesWithProducts.length) {
+    show('no-results');
+    el('noResultsQuery').textContent = data.query;
+    return;
+  }
+
+  // Results bar
+  show('results-bar');
+  el('results-title').textContent = `"${data.query}"`;
+  const total = storesWithProducts.reduce((a, s) => a + s.products.length, 0);
+  el('results-meta').textContent =
+    `${total} products found across ${storesWithProducts.length} stores · ${new Date(data.timestamp).toLocaleTimeString()}`;
+
+  // Store filter bar
+  const filterBar = el('storeFilter');
+  filterBar.style.display = 'flex';
+  filterBar.innerHTML = `
+    <button class="sf-btn ${activeStoreFilter === 'all' ? 'active' : ''}" data-store="all">All stores</button>
+    ${storesWithProducts.map(s =>
+      `<button class="sf-btn ${activeStoreFilter === s.id ? 'active' : ''}" data-store="${s.id}">
+        <span class="dot" style="background:${s.color}"></span>${s.name}
+      </button>`
+    ).join('')}`;
+  filterBar.querySelectorAll('.sf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeStoreFilter = btn.dataset.store;
+      renderResults(lastData);
     });
   });
+
+  // Build per-product comparison rows
+  // Collect unique product names by matching across stores
+  const grid = el('resultsGrid');
+  grid.innerHTML = '';
+
+  // Group: for each store's top product, build a comparison card
+  // Strategy: take top-1 product per store, find the cheapest across all stores
+  const topProducts = data.stores
+    .filter(s => s.products.length > 0)
+    .map(s => ({
+      store:   s,
+      product: s.products[0],
+    }));
+
+  if (!topProducts.length) { show('no-results'); el('noResultsQuery').textContent = data.query; return; }
+
+  // Show one comparison card at the top (best match across all stores)
+  const mainCard = buildComparisonCard(data.query, topProducts);
+  grid.appendChild(mainCard);
+
+  // Additional product cards (different products from same stores)
+  const maxExtra = Math.max(...data.stores.map(s => s.products.length));
+  for (let i = 1; i < Math.min(maxExtra, 5); i++) {
+    const extraProducts = data.stores
+      .filter(s => s.products[i])
+      .map(s => ({ store: s, product: s.products[i] }));
+    if (extraProducts.length >= 1) {
+      const card = buildComparisonCard(`${data.query} — variant ${i + 1}`, extraProducts);
+      grid.appendChild(card);
+    }
+  }
+
+  // Show store errors in status bar
+  const errors = data.stores.filter(s => s.error);
+  if (errors.length) {
+    setStatus(`⚠️ Could not fetch from: ${errors.map(s => s.name).join(', ')} (site may be blocking scrapers)`);
+  } else {
+    setStatus('');
+  }
 }
 
-function renderStorePills() {
-  const el = document.getElementById('storePills');
-  el.innerHTML = STORES.map(s =>
-    `<span class="store-pill" style="background:${s.color}">${s.emoji} ${s.name}</span>`
-  ).join('');
-}
+function buildComparisonCard(title, storeProducts) {
+  // storeProducts: [{ store, product }]
+  const prices = storeProducts.map(sp => sp.product.price).filter(Boolean);
+  if (!prices.length) return document.createElement('div');
 
-function renderProductCard(product) {
-  const rows = STORES.map(store => {
-    const price = product.prices[store.id];
-    const available = price !== null && price !== undefined;
-    return { store, price, available };
-  }).filter(r => r.available);
+  const minPrice   = Math.min(...prices);
+  const maxPrice   = Math.max(...prices);
+  const priceRange = maxPrice - minPrice || 1;
+  const cheapest   = storeProducts.find(sp => sp.product.price === minPrice);
+  const savings    = (maxPrice - minPrice).toFixed(2);
 
-  if (!rows.length) return '';
+  // Representative product (cheapest store's product)
+  const repProduct = cheapest.product;
 
-  const min = Math.min(...rows.map(r => r.price));
-  const max = Math.max(...rows.map(r => r.price));
-  const range = max - min || 1;
-  const cheapestStore = rows.find(r => r.price === min)?.store;
-  const savingAmt = (max - min).toFixed(2);
+  // Sort by price ascending
+  const sorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
 
-  // Sort rows: cheapest first
-  rows.sort((a, b) => a.price - b.price);
+  const imgHtml = repProduct.image
+    ? `<img class="product-img" src="${repProduct.image}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+       <div class="product-img-placeholder" style="display:none">🛒</div>`
+    : `<div class="product-img-placeholder">🛒</div>`;
 
-  // Include unavailable stores
-  const unavailRows = STORES.filter(s => {
-    const p = product.prices[s.id];
-    return p === null || p === undefined;
-  });
+  const urlHtml = repProduct.url
+    ? `<a href="${repProduct.url}" target="_blank" rel="noopener">View at ${cheapest.store.name} →</a>`
+    : '';
 
-  const priceRowsHtml = rows.map(r => {
-    const isCheap = r.price === min;
-    const barPct  = range === 0 ? 100 : ((r.price - min) / range) * 100;
-    const barFill = 100 - barPct; // invert: cheapest = full bar
+  const priceRows = sorted.map(sp => {
+    const isCheap = sp.product.price === minPrice;
+    const barFill = 100 - ((sp.product.price - minPrice) / priceRange) * 100;
     return `
       <div class="price-row ${isCheap ? 'cheapest' : ''}">
-        <div class="store-logo" style="background:${r.store.color}22; color:${r.store.color}; font-size:1.2rem;">${r.store.emoji}</div>
-        <div class="store-name">
-          ${r.store.name}
-          <span class="store-ar">${r.store.ar}</span>
+        <div class="store-icon" style="background:${sp.store.color}22; color:${sp.store.color}">${sp.store.emoji}</div>
+        <div class="store-label">
+          <div class="en">${sp.store.name}</div>
+          <div class="ar">${sp.store.ar}</div>
         </div>
-        <div class="price-bar-wrap">
-          <div class="price-bar" style="width:${Math.max(barFill,8)}%"></div>
-        </div>
-        <div class="price-value">${formatPrice(r.price)}<span class="sar"> SAR</span></div>
-        ${isCheap ? '<span class="cheapest-tag">BEST</span>' : ''}
+        <div class="bar-wrap"><div class="bar-fill" style="width:${Math.max(barFill,6)}%"></div></div>
+        <div class="price-val">${sp.product.price.toFixed(2)}<span class="sar"> SAR</span></div>
+        ${isCheap ? '<span class="best-tag">BEST</span>' : ''}
       </div>`;
   }).join('');
 
-  const unavailHtml = unavailRows.map(s => `
-    <div class="price-row unavailable">
-      <div class="store-logo" style="background:#f0f0f0; color:#aaa; font-size:1.2rem;">${s.emoji}</div>
-      <div class="store-name">${s.name}<span class="store-ar">${s.ar}</span></div>
-      <div class="price-bar-wrap"><div class="price-bar" style="width:0%"></div></div>
-      <div class="price-unavailable">Not available</div>
+  // Stores with no result
+  const missingStores = STORES.filter(s => !storeProducts.find(sp => sp.store.id === s.id));
+  const missingRows = missingStores.map(s => `
+    <div class="price-row no-result">
+      <div class="store-icon" style="background:#f0f0f0; color:#aaa">${s.emoji}</div>
+      <div class="store-label"><div class="en">${s.name}</div><div class="ar">${s.ar}</div></div>
+      <div class="bar-wrap"><div class="bar-fill" style="width:0"></div></div>
+      <div class="no-price">—</div>
     </div>`).join('');
 
-  const savingsHtml = parseFloat(savingAmt) > 0
-    ? `<div class="savings-strip">💰 Save up to <strong>${savingAmt} SAR</strong> by shopping at ${cheapestStore?.name} instead of the most expensive option.</div>`
+  const savingsHtml = parseFloat(savings) > 0.01
+    ? `<div class="savings-strip">
+         💰 Save up to <strong>&nbsp;${savings} SAR&nbsp;</strong> by shopping at ${cheapest.store.name}
+         instead of the most expensive option.
+       </div>`
     : '';
 
-  return `
-    <div class="product-card">
-      <div class="product-header">
-        <div class="product-emoji">${product.emoji}</div>
-        <div class="product-info">
-          <div class="product-name">${product.name}</div>
-          <div class="product-meta">
-            <span class="product-category">${product.category}</span>
-            <span>📦 ${product.unit}</span>
-            <span>🏪 ${rows.length} stores</span>
-          </div>
-          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.2rem;">${product.ar}</div>
-        </div>
-        <div class="best-badge">From ${formatPrice(min)} SAR</div>
+  const div = document.createElement('div');
+  div.className = 'product-card';
+  div.innerHTML = `
+    <div class="product-header">
+      ${imgHtml}
+      <div class="product-info">
+        <div class="product-name">${repProduct.name}</div>
+        <div class="product-source">${urlHtml}</div>
       </div>
-      <div class="price-table">
-        ${priceRowsHtml}
-        ${unavailHtml}
-      </div>
-      ${savingsHtml}
-    </div>`;
+      <div class="best-price-badge">From ${minPrice.toFixed(2)} SAR</div>
+    </div>
+    <div class="price-table">
+      ${priceRows}
+      ${missingRows}
+    </div>
+    ${savingsHtml}`;
+  return div;
 }
 
-function renderAll() {
-  filteredProducts = getResults();
-  const grid = document.getElementById('productsGrid');
-  const noRes = document.getElementById('no-results');
-  const resTitle = document.getElementById('results-title');
-  const resCount = document.getElementById('results-count');
-
-  renderCategoryChips();
-
-  const hasSearch = currentQuery.trim() !== '' || currentCategory !== 'All';
-
-  if (!hasSearch) {
-    renderHero(true);
-    grid.innerHTML = '';
-    noRes.classList.remove('visible');
-    return;
-  }
-
-  renderHero(false);
-
-  if (!filteredProducts.length) {
-    grid.innerHTML = '';
-    noRes.classList.add('visible');
-    document.getElementById('no-results-query').textContent = currentQuery || currentCategory;
-    resTitle.textContent = 'No results';
-    resCount.textContent = '';
-    return;
-  }
-
-  noRes.classList.remove('visible');
-  resTitle.textContent = currentQuery
-    ? `Results for "${currentQuery}"`
-    : currentCategory;
-  resCount.textContent = `${filteredProducts.length} product${filteredProducts.length !== 1 ? 's' : ''} found`;
-
-  grid.innerHTML = filteredProducts.map(renderProductCard).join('');
-}
-
-/* ══════════════════════════════════════════════════════════
-   AUTOCOMPLETE
-══════════════════════════════════════════════════════════ */
-function buildAutocomplete(query) {
-  const list = document.getElementById('autocompleteList');
-  if (!query.trim()) { list.classList.remove('open'); return; }
-
-  const q = query.toLowerCase();
-  const matches = PRODUCTS.filter(p =>
-    p.name.toLowerCase().includes(q) || p.ar.includes(q)
-  ).slice(0, 7);
-
-  // Also suggest categories
-  const catMatches = CATEGORIES.filter(c => c.toLowerCase().includes(q));
-
-  if (!matches.length && !catMatches.length) { list.classList.remove('open'); return; }
-
-  list.innerHTML = [
-    ...catMatches.slice(0, 2).map(c =>
-      `<div class="autocomplete-item" data-type="cat" data-val="${c}">📂 ${c} <span class="cat-badge">Category</span></div>`
-    ),
-    ...matches.map(p =>
-      `<div class="autocomplete-item" data-type="product" data-val="${p.name}">${p.emoji} ${p.name} <span class="cat-badge">${p.category}</span></div>`
-    )
-  ].join('');
-  list.classList.add('open');
-
-  list.querySelectorAll('.autocomplete-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const type = item.dataset.type;
-      const val  = item.dataset.val;
-      if (type === 'cat') {
-        currentCategory = val;
-        currentQuery = '';
-        document.getElementById('searchInput').value = '';
-      } else {
-        currentQuery = val;
-        document.getElementById('searchInput').value = val;
-      }
-      list.classList.remove('open');
-      renderAll();
-    });
-  });
-}
-
-/* ══════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════
    EVENTS
-══════════════════════════════════════════════════════════ */
-document.getElementById('searchInput').addEventListener('input', e => {
-  currentQuery = e.target.value;
-  buildAutocomplete(currentQuery);
-  renderAll();
+═══════════════════════════════════════════════════════ */
+el('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') search(el('searchInput').value);
+});
+el('searchBtn').addEventListener('click', () => search(el('searchInput').value));
+
+el('refreshBtn').addEventListener('click', () => {
+  if (currentQuery) search(currentQuery);
 });
 
-document.getElementById('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    document.getElementById('autocompleteList').classList.remove('open');
+/* ═══════════════════════════════════════════════════════
+   HEALTH CHECK on load
+═══════════════════════════════════════════════════════ */
+(async () => {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
+    if (r.ok) setStatus('✅ Connected to scraper server — ready to search!');
+  } catch (_) {
+    setStatus('⚠️ Scraper server not running. Start it with: node server.js');
   }
-});
-
-document.addEventListener('click', e => {
-  if (!e.target.closest('.search-wrap')) {
-    document.getElementById('autocompleteList').classList.remove('open');
-  }
-});
-
-document.getElementById('sortSelect').addEventListener('change', e => {
-  currentSort = e.target.value;
-  renderAll();
-});
-
-/* ══════════════════════════════════════════════════════════
-   INIT
-══════════════════════════════════════════════════════════ */
-renderStorePills();
-renderCategoryChips();
-renderAll();
+})();
 </script>
 </body>
 </html>
