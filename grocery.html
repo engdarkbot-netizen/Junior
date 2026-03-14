@@ -748,6 +748,42 @@ main {
   color: var(--text-muted);
 }
 
+/* ── Data quality badge (live / estimated) ─────────────────────── */
+.data-quality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .15rem .45rem;
+  border-radius: 10px;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: .35rem;
+  white-space: nowrap;
+}
+.data-quality-badge.live {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+[data-theme="dark"] .data-quality-badge.live {
+  background: rgba(22,101,52,.25);
+  color: #86efac;
+  border-color: rgba(134,239,172,.2);
+}
+.data-quality-badge.estimated {
+  background: var(--gold-pale);
+  color: var(--gold);
+  border: 1px solid rgba(217,119,6,.25);
+}
+[data-theme="dark"] .data-quality-badge.estimated {
+  background: rgba(217,119,6,.15);
+  color: #fbbf24;
+  border-color: rgba(251,191,36,.2);
+}
+
 /* ── Cache indicator ───────────────────────────────────────────── */
 .cache-badge {
   display: inline-flex;
@@ -1713,6 +1749,10 @@ function renderResults(data, ms) {
 
     // Price rows (sorted cheapest first)
     const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
+    const isDemo = !!data.demo;
+    const qualityBadge = isDemo
+      ? `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable">~est</span>`
+      : `<span class="data-quality-badge live" title="Live price from store">live</span>`;
     const priceRows = rowsSorted.map((sp, i) => {
       const isBest  = sp.product.price === minPrice;
       const barPct  = 100 - ((sp.product.price - minPrice) / pRange) * 80;
@@ -1722,7 +1762,7 @@ function renderResults(data, ms) {
             ${sp.store.emoji}
           </div>
           <div class="price-row-info">
-            <div class="price-row-store">${sanitize(sp.store.name)}</div>
+            <div class="price-row-store">${sanitize(sp.store.name)}${qualityBadge}</div>
             <div class="price-row-ar">${sanitize(sp.store.ar)}</div>
             <div class="price-row-bar">
               <div class="price-row-bar-fill" data-w="${Math.max(barPct, 6)}"></div>
@@ -1828,24 +1868,25 @@ function renderResults(data, ms) {
     setStatus(`⚠️ Couldn't fetch from: ${errors.map(s => s.name).join(', ')} — sites may be blocking scrapers`, 'warning');
   }
 
-  // WhatsApp share button — share cheapest price found
+  // WhatsApp share button — share cheapest price found (Arabic format)
   const waBtn = $('waShareBtn');
   if (waBtn) {
-    // Find the globally cheapest price across all stores/products
+    // Find the globally cheapest price, store name, and product name
     const cheapestPrice = allPrices.length ? globalMin : null;
-    const cheapestStore = cheapestPrice != null
-      ? (() => {
-          for (const s of sorted) {
-            const p = s.products.find(pr => pr.price === cheapestPrice);
-            if (p) return s.name;
-          }
-          return '';
-        })()
-      : '';
+    let cheapestStore = '';
+    let cheapestProductName = data.query;
     if (cheapestPrice != null) {
-      const waText = `🛒 ${data.query} — cheapest price: ${cheapestPrice.toFixed(2)} SAR` +
-        (cheapestStore ? ` at ${cheapestStore}` : '') +
-        ` | Compare all stores: ${location.origin}/?q=${encodeURIComponent(data.query)}`;
+      for (const s of sorted) {
+        const p = s.products.find(pr => pr.price === cheapestPrice);
+        if (p) {
+          cheapestStore = s.name;
+          cheapestProductName = p.name || data.query;
+          break;
+        }
+      }
+    }
+    if (cheapestPrice != null) {
+      const waText = `🛒 أرخص سعر لـ ${cheapestProductName}: ${cheapestPrice.toFixed(2)} ريال في ${cheapestStore}\nقارن الأسعار: https://production-890c.up.railway.app`;
       waBtn.href = `https://wa.me/?text=${encodeURIComponent(waText)}`;
       waBtn.classList.add('visible');
     } else {
