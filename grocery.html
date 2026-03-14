@@ -753,6 +753,42 @@ main {
   color: var(--text-muted);
 }
 
+/* ── Data quality badge (live / estimated) ─────────────────────── */
+.data-quality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .15rem .45rem;
+  border-radius: 10px;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  vertical-align: middle;
+  margin-left: .35rem;
+  white-space: nowrap;
+}
+.data-quality-badge.live {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+[data-theme="dark"] .data-quality-badge.live {
+  background: rgba(22,101,52,.25);
+  color: #86efac;
+  border-color: rgba(134,239,172,.2);
+}
+.data-quality-badge.estimated {
+  background: var(--gold-pale);
+  color: var(--gold);
+  border: 1px solid rgba(217,119,6,.25);
+}
+[data-theme="dark"] .data-quality-badge.estimated {
+  background: rgba(217,119,6,.15);
+  color: #fbbf24;
+  border-color: rgba(251,191,36,.2);
+}
+
 /* ── Cache indicator ───────────────────────────────────────────── */
 .cache-badge {
   display: inline-flex;
@@ -999,6 +1035,165 @@ footer {
 }
 .price-trend.up { background: var(--red-pale); color: var(--red); }
 .price-trend.down { background: var(--green-pale); color: var(--green-mid); }
+
+/* ── Demo notice banner ────────────────────────────────────────── */
+#demo-notice {
+  display: none;
+  margin-bottom: 1rem;
+  background: #fff7ed;
+  border: 2px solid #fb923c;
+  border-radius: var(--r-lg);
+  padding: 1rem 1.25rem;
+  font-size: .88rem;
+  color: #7c2d12;
+  line-height: 1.6;
+}
+[data-theme="dark"] #demo-notice {
+  background: rgba(251,146,60,.1);
+  border-color: rgba(251,146,60,.5);
+  color: #fed7aa;
+}
+#demo-notice.visible { display: flex; align-items: flex-start; gap: .85rem; }
+#demo-notice .demo-icon { font-size: 1.4rem; flex-shrink: 0; margin-top: .1rem; }
+#demo-notice .demo-text .demo-heading { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
+#demo-notice .demo-text .demo-en { font-weight: 400; }
+#demo-notice .demo-text .demo-ar { opacity: .85; direction: rtl; margin-top: .15rem; }
+#demo-notice .demo-help {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fb923c;
+  color: #fff;
+  font-size: .75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: .1rem;
+  title: "Why demo mode?";
+}
+#demo-notice .demo-help:hover { background: #ea580c; }
+
+/* ── Copy button tooltip ───────────────────────────────────────── */
+.copy-btn {
+  position: relative;
+  height: 34px;
+  padding: 0 .85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  transition: all var(--fast);
+  white-space: nowrap;
+}
+.copy-btn:hover { border-color: var(--green-mid); color: var(--green-mid); }
+.copy-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--surface);
+  font-size: .75rem;
+  font-weight: 500;
+  padding: .25rem .6rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+.copy-tooltip.show { opacity: 1; }
+
+/* ── Last updated text ─────────────────────────────────────────── */
+.last-updated {
+  font-size: .75rem;
+  color: var(--text-faint);
+  margin-top: .2rem;
+}
+
+/* ── WhatsApp share button ─────────────────────────────────────── */
+.wa-share-btn {
+  height: 34px;
+  padding: 0 .85rem;
+  border: 1px solid #25d366;
+  border-radius: var(--r-md);
+  background: #25d366;
+  color: #fff;
+  font-family: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  gap: .35rem;
+  transition: all var(--fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.wa-share-btn.visible { display: inline-flex; }
+.wa-share-btn:hover { background: #1ebe5d; border-color: #1ebe5d; }
+
+/* ── Best-store summary card ───────────────────────────────────── */
+#best-store-card {
+  display: none;
+  align-items: center;
+  gap: .75rem;
+  background: linear-gradient(135deg, #0f5132, #198754);
+  color: #fff;
+  border-radius: var(--r-xl);
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 16px rgba(15,81,50,.3);
+  animation: card-in var(--slow) var(--ease) both;
+}
+#best-store-card.visible { display: flex; }
+.bsc-label {
+  font-size: .75rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .75;
+  margin-bottom: .15rem;
+}
+.bsc-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.bsc-icon { font-size: 2rem; flex-shrink: 0; }
+
+/* ── Savings calculator banner ─────────────────────────────────── */
+#savings-calc {
+  display: none;
+  align-items: center;
+  gap: .75rem;
+  background: linear-gradient(135deg, var(--gold), #b45309);
+  color: #fff;
+  border-radius: var(--r-xl);
+  padding: .85rem 1.5rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 4px 16px rgba(217,119,6,.28);
+  animation: card-in var(--slow) var(--ease) both;
+  font-size: .92rem;
+  font-weight: 500;
+}
+#savings-calc.visible { display: flex; }
+#savings-calc strong { font-weight: 800; font-size: 1.05rem; }
+.sc-icon { font-size: 1.6rem; flex-shrink: 0; }
+.sc-text { flex: 1; line-height: 1.45; }
   </style>
 </head>
 <body>
@@ -1017,7 +1212,8 @@ footer {
     <div class="search-wrap" id="searchWrap">
       <input id="searchInput" type="text"
              placeholder="Search any product… (milk, rice, chicken)"
-             autocomplete="off" spellcheck="false" />
+             autocomplete="off" spellcheck="false"
+             aria-label="Search for grocery products in Arabic or English" />
       <button class="search-btn" id="searchBtn" title="Search (Enter)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
@@ -1025,11 +1221,11 @@ footer {
     </div>
 
     <div class="header-actions">
-      <button class="basket-btn" id="basketBtn" title="Shopping basket">
+      <button class="basket-btn" id="basketBtn" title="Shopping basket" aria-label="Basket, 0 items">
         🛍️ Basket
         <span class="basket-count" id="basketCount" style="display:none">0</span>
       </button>
-      <button class="icon-btn" id="themeBtn" title="Toggle dark mode">🌙</button>
+      <button class="icon-btn" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
     </div>
   </div>
 </div>
@@ -1076,7 +1272,7 @@ footer {
   </section>
 
   <!-- Loading -->
-  <div id="loading">
+  <div id="loading" role="status" aria-live="polite" aria-label="Loading search results">
     <div class="loading-header">
       <div class="loading-title">
         Fetching live prices
@@ -1089,22 +1285,57 @@ footer {
   </div>
 
   <!-- Error -->
-  <div id="error-box">
-    <span class="empty-icon">⚠️</span>
-    <h3>Could not reach the server</h3>
-    <p class="empty-sub">
-      Make sure the backend is running.<br>
-      <code>node server.js</code>
+  <div id="error-box" role="alert" aria-live="assertive">
+    <span class="empty-icon" id="errorIcon">⚠️</span>
+    <h3 id="errorTitle">Search failed — please try again</h3>
+    <p class="empty-sub" id="errorSub">
+      A network or server error occurred while fetching prices.
     </p>
+    <button id="errorRetryBtn" onclick="if(currentQuery){window.doSearch?window.doSearch(currentQuery):doSearch(currentQuery);}"
+      style="margin-top:1.25rem;padding:.6rem 1.5rem;background:var(--green-mid);color:#fff;border:none;border-radius:var(--r-md);font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;transition:background var(--fast)"
+      onmouseover="this.style.background='var(--green)'" onmouseout="this.style.background='var(--green-mid)'">
+      ↺ Retry search
+    </button>
+  </div>
+
+  <!-- Demo notice -->
+  <div id="demo-notice">
+    <span class="demo-icon">📊</span>
+    <div class="demo-text">
+      <div class="demo-heading">Showing estimated prices</div>
+      <div class="demo-en">These are sample prices to demonstrate the comparison feature. Add PROXY_URL to see live prices.</div>
+      <div class="demo-ar">هذه أسعار تقديرية لعرض ميزة المقارنة. أضف PROXY_URL لرؤية الأسعار الحية.</div>
+    </div>
+    <a class="demo-help" href="STRATEGY.md" target="_blank" title="Why demo mode? Click to learn more">?</a>
+  </div>
+
+  <!-- Best-store summary card -->
+  <div id="best-store-card">
+    <div class="bsc-icon">🏆</div>
+    <div>
+      <div class="bsc-label">Best store overall</div>
+      <div class="bsc-value" id="bestStoreValue">—</div>
+    </div>
+  </div>
+
+  <!-- Savings calculator banner -->
+  <div id="savings-calc">
+    <div class="sc-icon">💰</div>
+    <div class="sc-text" id="savingsCalcText"></div>
   </div>
 
   <!-- Results bar -->
-  <div id="results-bar">
+  <div id="results-bar" role="status" aria-live="polite">
     <div>
       <div class="results-query" id="resultsTitle"></div>
       <div class="results-meta" id="resultsMeta"></div>
+      <div class="last-updated" id="lastUpdated" style="display:none"></div>
     </div>
     <div class="results-actions">
+      <button class="copy-btn" id="copyBtn" style="display:none" title="Copy cheapest price to clipboard">
+        📋 Copy
+        <span class="copy-tooltip" id="copyTooltip">Copied!</span>
+      </button>
       <select class="sort-select" id="sortSelect">
         <option value="savings">Sort: Best savings</option>
         <option value="price_asc">Sort: Lowest price</option>
@@ -1121,6 +1352,10 @@ footer {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Share
       </button>
+      <a class="wa-share-btn" id="waShareBtn" target="_blank" rel="noopener noreferrer" title="Share cheapest price on WhatsApp">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+      </a>
     </div>
   </div>
 
@@ -1134,7 +1369,11 @@ footer {
   <div id="no-results">
     <span class="empty-icon">😕</span>
     <h3>No products found</h3>
-    <p class="empty-sub">We couldn't find "<span id="noResultsQuery"></span>" in any store.<br>Try a different term — in Arabic or English.</p>
+    <p class="empty-sub">We couldn't find "<span id="noResultsQuery"></span>" in any store.<br>Try a different search term in Arabic or English.</p>
+    <div style="margin-top:1.25rem">
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.6rem">Popular searches you can try:</p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem" id="noResultsChips"></div>
+    </div>
   </div>
 
 </main>
@@ -1190,6 +1429,59 @@ const STORE_MAP = Object.fromEntries(STORES.map(s => [s.id, s]));
 const POPULAR   = ['حليب', 'أرز', 'خبز', 'بيض', 'زيت', 'milk', 'rice', 'eggs', 'water', 'chicken'];
 const RECENT_KEY = 'gc_recent_v1';
 
+/* Catalog autocomplete terms — mirrors DEMO_CATALOG product names on the server.
+   Used to show instant suggestions while typing without a round-trip. */
+const CATALOG_SUGGESTIONS = [
+  // milk
+  'حليب المراعي كامل الدسم', 'حليب المراعي قليل الدسم', 'حليب الجهينة طازج', 'حليب نادك',
+  // rice
+  'أرز السلة بسمتي', 'أرز الكيف بسمتي', 'أرز المراعي بسمتي',
+  // water
+  'مياه نيوم', 'مياه بيتا', 'مياه المراعي', 'مياه هنا',
+  // eggs
+  'بيض المراعي وايت', 'بيض بلدي طازج', 'بيض الوطنية',
+  // bread
+  'خبز عيش بلدي', 'خبز صامولي', 'خبز تميس', 'خبز التوست الذهبي',
+  // chicken
+  'دجاج كامل طازج مبرد', 'صدر دجاج طازج', 'أفخاذ دجاج مبردة', 'فيليه دجاج مجمد نادك',
+  // oil
+  'زيت دوار الشمس', 'زيت الذرة المراعي', 'زيت زيتون', 'زيت نخيل',
+  // sugar
+  'سكر أبيض ناعم', 'سكر قصب بني', 'سكر أبيض المراعي',
+  // coffee
+  'نسكافيه كلاسيك', 'قهوة عربية بالهيل المراعي', 'نسكافيه جولد',
+  // dates
+  'تمر سكري فاخر', 'تمر مجدول مغربي', 'تمر عجوة المدينة', 'تمر خلاص فاخر',
+  // yogurt
+  'زبادي المراعي طبيعي', 'زبادي الجهينة', 'لبن رايب المراعي',
+  // cheese
+  'جبن شيدر كرافت', 'جبن كريمي فيلادلفيا', 'جبن أبيض طري المراعي', 'جبن موزاريلا مبشور',
+  // tomato
+  'طماطم طازجة', 'معجون طماطم هاينز', 'صلصة طماطم إيطالية باريلا',
+  // onion
+  'بصل أبيض طازج', 'بصل أحمر طازج', 'ثوم طازج',
+  // pasta
+  'مكرونة باريلا سباغيتي', 'مكرونة باريلا بيني', 'مكرونة ملوكي', 'مكرونة ماما',
+  // laundry
+  'مسحوق غسيل أريال', 'مسحوق غسيل تايد', 'مسحوق غسيل برسيل', 'مسحوق غسيل OMO',
+  // baby formula
+  'حليب نان أوبتيبرو', 'حليب سيميلاك أدفانس', 'حليب أبتاميل', 'حليب نان كومفورت',
+  // juice
+  'عصير المراعي برتقال', 'عصير راني مانجو', 'عصير تروبيكانا برتقال', 'عصير المراعي تفاح', 'عصير راني خوخ',
+  // chips
+  'شيبس ليز كلاسيك', 'شيبس برينجلز', 'شيبس تام تام', 'شيبس ليز بالجبنة',
+  // tissues
+  'مناديل كلينكس', 'مناديل ورقية', 'ورق مطبخ',
+  // shampoo
+  'شامبو هيد آند شولدرز', 'شامبو بانتين', 'شامبو داف', 'شامبو لوريال',
+  // diapers
+  'حفاضات بامبرز', 'حفاضات هاجيز ناتشرا كير', 'حفاضات هاجيز بلس',
+  // canned
+  'فول مدمس السنونو', 'حمص بالطحينة', 'تونة بالزيت', 'تونة باراميون',
+  // frozen
+  'بيتزا مجمدة', 'برغر دجاج مجمد', 'سمبوسة لحم مجمدة', 'وجبة كبسة دجاج مجمدة',
+];
+
 /* ════════════════════════════════════════════════════════════════
    STATE
 ════════════════════════════════════════════════════════════════ */
@@ -1220,6 +1512,10 @@ function safeUrl(url) {
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return '#';
     return u.href;
   } catch (_) { return '#'; }
+}
+
+function formatSAR(p) {
+  return 'SAR ' + p.toFixed(2);
 }
 
 function setStatus(msg, type = '') {
@@ -1278,15 +1574,40 @@ function buildDropdown(filter = '') {
   const recent  = getRecent().filter(x => !filter || x.toLowerCase().includes(filter.toLowerCase()));
   const popular = POPULAR.filter(x => !filter || x.toLowerCase().includes(filter.toLowerCase()));
 
+  // Autocomplete from CATALOG_SUGGESTIONS when the user is actively typing
+  const filterLower = filter.toLowerCase();
+  const catalogMatches = filter.length >= 2
+    ? CATALOG_SUGGESTIONS.filter(s => s.toLowerCase().includes(filterLower)).slice(0, 5)
+    : [];
+
   let html = '';
   if (recent.length) {
-    html += `<div class="dropdown-section"><div class="dropdown-label">Recent</div>`;
+    html += `<div class="dropdown-section">
+      <div style="display:flex;align-items:center;padding:.4rem 1rem .2rem">
+        <span class="dropdown-label" style="padding:0;flex:1">Recent</span>
+        <button id="clearHistoryBtn" style="font-size:.7rem;color:var(--text-muted);background:none;border:none;cursor:pointer;padding:0;font-family:inherit" title="Clear search history">Clear</button>
+      </div>`;
     recent.slice(0, 5).forEach(r => {
       html += `<div class="dropdown-item" data-q="${sanitize(r)}">
                  <span class="di-icon">🕐</span>${sanitize(r)}
                </div>`;
     });
     html += `</div><div class="dropdown-divider"></div>`;
+  }
+  if (catalogMatches.length) {
+    // Filter out any already shown in recent
+    const recentSet = new Set(recent);
+    const unique = catalogMatches.filter(s => !recentSet.has(s));
+    if (unique.length) {
+      html += `<div class="dropdown-section"><div class="dropdown-label">Suggestions</div>`;
+      unique.forEach(s => {
+        html += `<div class="dropdown-item" data-q="${sanitize(s)}">
+                   <span class="di-icon">💡</span>${sanitize(s)}
+                 </div>`;
+      });
+      html += `</div>`;
+      if (popular.length && !filter) html += `<div class="dropdown-divider"></div>`;
+    }
   }
   if (popular.length && !filter) {
     html += `<div class="dropdown-section"><div class="dropdown-label">Popular</div>`;
@@ -1307,6 +1628,14 @@ function buildDropdown(filter = '') {
       doSearch(item.dataset.q);
     });
   });
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      localStorage.removeItem(RECENT_KEY);
+      buildDropdown($('searchInput').value);
+    });
+  }
 }
 
 function openDropdown() {
@@ -1359,19 +1688,22 @@ function renderPopularChips(items, labelText) {
   });
 }
 
+// Hardcoded popular Arabic terms shown when no trending data available
+const POPULAR_AR = ['حليب المراعي', 'أرز بسمتي', 'زيت دوار الشمس', 'بيض المراعي', 'دجاج مبرد'];
+
 // Populate chips: try live trending first, fall back to static list
 (async () => {
   try {
     const r = await fetch('/api/trending?limit=8', { signal: AbortSignal.timeout(2000) });
     if (r.ok) {
       const { trending } = await r.json();
-      if (trending && trending.length >= 3) {
+      if (trending && trending.length >= 1) {
         renderPopularChips(trending.map(t => t.query), '🔥 Trending:');
         return;
       }
     }
   } catch (_) {}
-  renderPopularChips(POPULAR.slice(0, 8), 'Try:');
+  renderPopularChips(POPULAR_AR, 'Try:');
 })();
 
 // Populate hero stats from /api/stats
@@ -1411,7 +1743,12 @@ async function doSearch(rawQuery) {
   hide('results-bar');
   hide('no-results');
   hide('error-box');
+  const _retryBtn = $('errorRetryBtn'); if (_retryBtn) _retryBtn.disabled = false;
+  $('best-store-card').classList.remove('visible');
+  $('savings-calc').classList.remove('visible');
   $('store-filter').classList.remove('visible');
+  $('demo-notice').classList.remove('visible');
+  const _waBtn = $('waShareBtn'); if (_waBtn) _waBtn.classList.remove('visible');
   setStatus('');
 
   // Skeleton cards
@@ -1511,11 +1848,39 @@ async function doSearch(rawQuery) {
         setTimeout(() => renderResults(data, ms), 200);
       } catch (e2) {
         $('loading').style.display = 'none';
-        show('error-box');
-        setStatus('⚠️ ' + e2.message, 'error');
+        const statusCode = e2.message.match(/HTTP (\d+)/)?.[1];
+        if (statusCode === '429') {
+          $('errorIcon').textContent = '🚦';
+          $('errorTitle').textContent = 'Too many searches — please wait a moment';
+          $('errorSub').innerHTML = 'You\'ve made too many requests in a short time.<br>Please wait <strong id="rateLimitCountdown">30</strong> seconds and try again.';
+          show('error-box');
+          setStatus('🚦 Rate limited — please wait', 'error');
+          let secs = 30;
+          const countdownEl = document.getElementById('rateLimitCountdown');
+          const retryBtn = $('errorRetryBtn');
+          if (retryBtn) retryBtn.disabled = true;
+          const countdownTimer = setInterval(() => {
+            secs--;
+            if (countdownEl) countdownEl.textContent = secs;
+            if (secs <= 0) {
+              clearInterval(countdownTimer);
+              if (retryBtn) retryBtn.disabled = false;
+              setStatus('');
+            }
+          }, 1000);
+        } else {
+          $('errorIcon').textContent = '⚠️';
+          $('errorTitle').textContent = 'Search failed — please try again';
+          $('errorSub').textContent = 'A network or server error occurred while fetching prices.';
+          show('error-box');
+          setStatus('⚠️ ' + e2.message, 'error');
+        }
       }
     } else {
       $('loading').style.display = 'none';
+      $('errorIcon').textContent = '⚠️';
+      $('errorTitle').textContent = 'Search failed — please try again';
+      $('errorSub').textContent = 'A network or server error occurred while fetching prices.';
       show('error-box');
       setStatus('⚠️ ' + err.message, 'error');
     }
@@ -1557,8 +1922,49 @@ function renderResults(data, ms) {
   if (!storesWithProducts.length) {
     show('no-results');
     $('noResultsQuery').textContent = data.query;
+    // Populate popular search chips in no-results panel with POPULAR_AR suggestions
+    const chips = $('noResultsChips');
+    if (chips) {
+      // Pick 3 suggestions from POPULAR_AR different from current query
+      const suggestions = POPULAR_AR.filter(p => p.toLowerCase() !== data.query.toLowerCase()).slice(0, 3);
+      // Update or create the "Did you mean" line
+      const noResultsDiv = $('no-results');
+      let dymEl = noResultsDiv.querySelector('#noResultsDidYouMean');
+      if (!dymEl) {
+        dymEl = document.createElement('p');
+        dymEl.id = 'noResultsDidYouMean';
+        dymEl.style.cssText = 'font-size:.85rem;color:var(--text-muted);margin:.75rem 0 .25rem';
+        chips.parentNode.insertBefore(dymEl, chips);
+      }
+      if (suggestions.length) {
+        dymEl.innerHTML = `Did you mean: ${suggestions.map(s => `<strong>${sanitize(s)}</strong>`).join(', ')}?`;
+        dymEl.style.display = '';
+      } else {
+        dymEl.style.display = 'none';
+      }
+      chips.innerHTML = POPULAR_AR.slice(0, 8).map(p =>
+        `<button class="ps-chip">${sanitize(p)}</button>`
+      ).join('');
+      chips.querySelectorAll('.ps-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $('searchInput').value = btn.textContent;
+          window.doSearch ? window.doSearch(btn.textContent) : doSearch(btn.textContent);
+        });
+      });
+    }
     return;
   }
+
+  // Demo notice banner
+  const demoNotice = $('demo-notice');
+  if (data.demo) {
+    demoNotice.classList.add('visible');
+  } else {
+    demoNotice.classList.remove('visible');
+  }
+
+  // Update page title for useful browser history
+  document.title = `${data.query} (${totalProducts} prices) — GroceryCompare SA`;
 
   // Results bar
   show('results-bar');
@@ -1586,6 +1992,54 @@ function renderResults(data, ms) {
       renderResults(lastData, 0);
     });
   });
+
+  // Best-store summary card (uses all stores, not filtered)
+  const bscEl = $('best-store-card');
+  if (storesWithProducts.length > 0) {
+    // For each store, compute avg price across its products
+    const storeAvgs = storesWithProducts.map(s => {
+      const prices = s.products.map(p => p.price).filter(Boolean);
+      const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : Infinity;
+      return { store: s, count: prices.length, avg };
+    });
+    // Best = most products, then lowest avg
+    storeAvgs.sort((a, b) => b.count - a.count || a.avg - b.avg);
+    const best = storeAvgs[0];
+    const storeInfo = STORE_MAP[best.store.id] || best.store;
+    $('bestStoreValue').textContent =
+      `${storeInfo.emoji} ${best.store.name} — avg ${formatSAR(best.avg)} · ${best.count} product${best.count !== 1 ? 's' : ''}`;
+    bscEl.classList.add('visible');
+  } else {
+    bscEl.classList.remove('visible');
+  }
+
+  // Savings calculator banner: cheapest vs most expensive store (by their min product price)
+  const scEl = $('savings-calc');
+  if (storesWithProducts.length >= 2) {
+    const storeMinPrices = storesWithProducts.map(s => {
+      const prices = s.products.map(p => p.price).filter(p => p > 0);
+      return { store: s, minPrice: prices.length ? Math.min(...prices) : Infinity };
+    }).filter(x => x.minPrice < Infinity);
+    if (storeMinPrices.length >= 2) {
+      storeMinPrices.sort((a, b) => a.minPrice - b.minPrice);
+      const cheapestS = storeMinPrices[0];
+      const priceyS   = storeMinPrices[storeMinPrices.length - 1];
+      const saving    = (priceyS.minPrice - cheapestS.minPrice).toFixed(2);
+      if (parseFloat(saving) > 0.05) {
+        $('savingsCalcText').innerHTML =
+          `You could save <strong>SAR ${saving}</strong> by shopping at ` +
+          `<strong>${sanitize(cheapestS.store.name)}</strong> vs ` +
+          `<strong>${sanitize(priceyS.store.name)}</strong>`;
+        scEl.classList.add('visible');
+      } else {
+        scEl.classList.remove('visible');
+      }
+    } else {
+      scEl.classList.remove('visible');
+    }
+  } else {
+    scEl.classList.remove('visible');
+  }
 
   // Filter stores
   const filtered = activeFilter === 'all'
@@ -1634,6 +2088,10 @@ function renderResults(data, ms) {
 
     // Price rows (sorted cheapest first)
     const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
+    const isDemo = !!data.demo;
+    const qualityBadge = isDemo
+      ? `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable">~est</span>`
+      : `<span class="data-quality-badge live" title="Live price from store">live</span>`;
     const priceRows = rowsSorted.map((sp, i) => {
       const isBest  = sp.product.price === minPrice;
       const barPct  = 100 - ((sp.product.price - minPrice) / pRange) * 80;
@@ -1643,14 +2101,14 @@ function renderResults(data, ms) {
             ${sp.store.emoji}
           </div>
           <div class="price-row-info">
-            <div class="price-row-store">${sanitize(sp.store.name)}</div>
+            <div class="price-row-store">${sanitize(sp.store.name)}${qualityBadge}</div>
             <div class="price-row-ar">${sanitize(sp.store.ar)}</div>
             <div class="price-row-bar">
               <div class="price-row-bar-fill" data-w="${Math.max(barPct, 6)}"></div>
             </div>
           </div>
           <div class="price-val-wrap">
-            <div class="price-num">${sp.product.price.toFixed(2)}<span class="price-sar"> SAR</span>${isBest ? '<span class="best-tag">BEST</span>' : ''}${(() => { const t = getPriceTrend(data.query, sp.store.id, sp.product.price); return t ? `<span class="price-trend ${t}">${t === 'up' ? '↑' : '↓'}</span>` : ''; })()}</div>
+            <div class="price-num">${formatSAR(sp.product.price)}<span class="price-sar"></span>${isBest ? '<span class="best-tag">BEST</span>' : ''}${(() => { const t = getPriceTrend(data.query, sp.store.id, sp.product.price); return t ? `<span class="price-trend ${t}">${t === 'up' ? '↑' : '↓'}</span>` : ''; })()}</div>
           </div>
         </div>`;
     }).join('');
@@ -1694,7 +2152,7 @@ function renderResults(data, ms) {
         </div>
         <div class="card-badge">
           <div class="best-badge">👑 Best price</div>
-          <div class="best-price-num">${minPrice.toFixed(2)}<span class="sar"> SAR</span></div>
+          <div class="best-price-num">${formatSAR(minPrice)}<span class="sar"></span></div>
         </div>
       </div>
       <div class="price-table">
@@ -1747,6 +2205,83 @@ function renderResults(data, ms) {
   // Errors in status bar
   if (errors.length) {
     setStatus(`⚠️ Couldn't fetch from: ${errors.map(s => s.name).join(', ')} — sites may be blocking scrapers`, 'warning');
+  }
+
+  // "Last updated" timestamp
+  const lastUpdatedEl = $('lastUpdated');
+  if (lastUpdatedEl) {
+    lastUpdatedEl.style.display = '';
+    if (data.timestamp) {
+      const ts = new Date(data.timestamp);
+      const diffMs = Date.now() - ts.getTime();
+      const diffMin = Math.round(diffMs / 60000);
+      const timeStr = diffMin < 1 ? 'just now' : diffMin === 1 ? '1 minute ago' : `${diffMin} minutes ago`;
+      lastUpdatedEl.textContent = `Last updated: ${timeStr}`;
+    } else {
+      lastUpdatedEl.textContent = 'Last updated: just now';
+    }
+  }
+
+  // "Copy cheapest price" button
+  const copyBtn = $('copyBtn');
+  if (copyBtn) {
+    if (allPrices.length) {
+      copyBtn.style.display = '';
+      // Find the globally cheapest product name and store name
+      let cpName = data.query, cpStore = '';
+      for (const s of sorted) {
+        const p = s.products.find(pr => pr.price === globalMin);
+        if (p) { cpName = p.name || data.query; cpStore = s.name; break; }
+      }
+      const copyText = `${cpName} — ${formatSAR(globalMin)} at ${cpStore}`;
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(copyText);
+        } catch (_) {
+          // Fallback for older browsers
+          const ta = document.createElement('textarea');
+          ta.value = copyText;
+          ta.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        const tip = $('copyTooltip');
+        if (tip) {
+          tip.classList.add('show');
+          setTimeout(() => tip.classList.remove('show'), 1500);
+        }
+      };
+    } else {
+      copyBtn.style.display = 'none';
+    }
+  }
+
+  // WhatsApp share button — share cheapest price found (Arabic format)
+  const waBtn = $('waShareBtn');
+  if (waBtn) {
+    // Find the globally cheapest price, store name, and product name
+    const cheapestPrice = allPrices.length ? globalMin : null;
+    let cheapestStore = '';
+    let cheapestProductName = data.query;
+    if (cheapestPrice != null) {
+      for (const s of sorted) {
+        const p = s.products.find(pr => pr.price === cheapestPrice);
+        if (p) {
+          cheapestStore = s.name;
+          cheapestProductName = p.name || data.query;
+          break;
+        }
+      }
+    }
+    if (cheapestPrice != null) {
+      const waText = `🛒 أرخص سعر لـ ${cheapestProductName}: ${cheapestPrice.toFixed(2)} ريال في ${cheapestStore}\nقارن الأسعار: https://production-890c.up.railway.app`;
+      waBtn.href = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      waBtn.classList.add('visible');
+    } else {
+      waBtn.classList.remove('visible');
+    }
   }
 }
 
@@ -1874,6 +2409,9 @@ function renderBasket() {
   } else {
     countEl.style.display = 'none';
   }
+  // Update basket button aria-label with current count
+  const basketBtn = $('basketBtn');
+  if (basketBtn) basketBtn.setAttribute('aria-label', `Basket, ${count} item${count !== 1 ? 's' : ''}`);
   const emptyEl  = $('basketEmpty');
   const listEl   = $('basketItemsList');
   const footerEl = $('basketFooter');
@@ -1892,7 +2430,7 @@ function renderBasket() {
         <div class="basket-item-name">${sanitize(item.name.slice(0, 50))}</div>
         <div class="basket-item-store">${sanitize(item.store)} · ${sanitize(item.query)}</div>
       </div>
-      <div class="basket-item-price">${item.price.toFixed(2)} SAR</div>
+      <div class="basket-item-price">${formatSAR(item.price)}</div>
       <button class="basket-item-remove" data-query="${sanitize(item.query)}" title="Remove">×</button>
     </div>
   `).join('');
@@ -1969,7 +2507,7 @@ function renderBasketResults(data) {
           ${s.missing > 0 ? `<div class="bsr-missing">${s.missing} item${s.missing > 1 ? 's' : ''} not found</div>` : ''}
         </div>
         ${isCheapest ? '<span class="bsr-best-tag">BEST</span>' : ''}
-        <div class="bsr-total">${s.total.toFixed(2)} SAR</div>
+        <div class="bsr-total">${formatSAR(s.total)}</div>
       </div>`;
   });
 
@@ -1977,10 +2515,40 @@ function renderBasketResults(data) {
     ? (Math.max(...complete.map(s => s.total)) - minTotal).toFixed(2)
     : null;
 
+  // Best single store recommendation: favour stores with all items; among those pick cheapest;
+  // if none have all items, pick the one with fewest missing then lowest total.
+  const allStores = [...complete, ...partial];
+  let bestSingle = null;
+  if (allStores.length > 0) {
+    const sorted = [...allStores].sort((a, b) => {
+      if (a.missing !== b.missing) return a.missing - b.missing; // fewer missing first
+      return a.total - b.total;                                   // then lowest total
+    });
+    bestSingle = sorted[0];
+  }
+
+  const bestSingleHtml = bestSingle
+    ? (() => {
+        const hasAll = bestSingle.missing === 0;
+        const itemCount = basket.length;
+        const foundCount = itemCount - bestSingle.missing;
+        const coverageText = hasAll
+          ? `has all ${itemCount} item${itemCount !== 1 ? 's' : ''}`
+          : `has ${foundCount} of ${itemCount} items`;
+        return `
+          <div style="margin-top:.9rem;padding:.8rem 1rem;background:linear-gradient(135deg,var(--green),var(--green-mid));border-radius:var(--r-md);color:#fff;font-size:.85rem;line-height:1.5">
+            <div style="font-weight:700;font-size:.95rem;margin-bottom:.2rem">🏆 Best single store for your full basket:</div>
+            <div><strong>${sanitize(bestSingle.emoji)} ${sanitize(bestSingle.name)}</strong> — ${coverageText} · <strong>${formatSAR(bestSingle.total)}</strong></div>
+            ${!hasAll ? `<div style="opacity:.82;font-size:.78rem;margin-top:.25rem">⚠️ ${bestSingle.missing} item${bestSingle.missing > 1 ? 's' : ''} not available — check other stores for those</div>` : ''}
+          </div>`;
+      })()
+    : '';
+
   resultsEl.innerHTML = `
     <div style="font-size:.8rem;font-weight:600;color:var(--text-muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">Basket Total by Store</div>
     ${rows.join('')}
     ${savings && parseFloat(savings) > 0 ? `<div style="margin-top:.75rem;padding:.65rem;background:var(--green-pale);border-radius:var(--r-md);font-size:.82rem;font-weight:600;color:var(--green)">💰 Save up to ${savings} SAR by choosing the best store</div>` : ''}
+    ${bestSingleHtml}
   `;
 }
 
