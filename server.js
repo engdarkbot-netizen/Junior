@@ -1278,13 +1278,56 @@ app.get('/api/logs', (req, res) => {
   res.json({ logs: recentLogs.slice(-n) });
 });
 
+/* ─── /api/version ─────────────────────────────────────────────── */
+app.get('/api/version', (_, res) => res.json({
+  version:     '1.0.0',
+  env:         process.env.NODE_ENV || 'development',
+  nodeVersion: process.version,
+  platform:    process.platform,
+}));
+
+/* ─── Request timeout middleware (30s) for /api/ routes ────────── */
+app.use('/api/', (req, res, next) => {
+  const timer = setTimeout(() => {
+    if (res.headersSent) return;
+    res.status(503).json({ error: 'Request timed out' });
+  }, 30_000);
+  res.on('finish', () => clearTimeout(timer));
+  res.on('close',  () => clearTimeout(timer));
+  next();
+});
+
 /* ─── Start ────────────────────────────────────────────────────── */
-app.listen(PORT, async () => {
+const httpServer = app.listen(PORT, async () => {
   console.log(`\n🛒  GroceryCompare SA  →  http://localhost:${PORT}`);
   console.log(`     Proxy: ${PROXY_URL ? `✅ ${PROXY_URL}` : '❌ none (add PROXY_URL env var for Saudi exit node)'}\n`);
 });
 
-process.on('SIGINT', async () => {
-  if (browserInstance) await browserInstance.close();
+/* ─── Graceful shutdown ─────────────────────────────────────────── */
+async function shutdown(signal) {
+  console.log(`\n[${signal}] Graceful shutdown initiated…`);
+
+  // Force-exit if shutdown takes longer than 10 s
+  const forceExit = setTimeout(() => {
+    console.error('Shutdown timed out — forcing exit');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+
+  // 1. Stop accepting new HTTP requests
+  httpServer.close(() => console.log('HTTP server closed'));
+
+  // 2. Close the browser
+  try {
+    if (browserInstance) await browserInstance.close();
+    console.log('Browser closed');
+  } catch (err) {
+    console.error('Error closing browser:', err.message);
+  }
+
+  clearTimeout(forceExit);
   process.exit(0);
-});
+}
+
+process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

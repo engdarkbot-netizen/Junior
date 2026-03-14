@@ -1061,6 +1061,50 @@ footer {
 #demo-notice .demo-text .demo-en { font-weight: 600; }
 #demo-notice .demo-text .demo-ar { opacity: .85; direction: rtl; margin-top: .1rem; }
 
+/* ── Copy button tooltip ───────────────────────────────────────── */
+.copy-btn {
+  position: relative;
+  height: 34px;
+  padding: 0 .85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  transition: all var(--fast);
+  white-space: nowrap;
+}
+.copy-btn:hover { border-color: var(--green-mid); color: var(--green-mid); }
+.copy-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--surface);
+  font-size: .75rem;
+  font-weight: 500;
+  padding: .25rem .6rem;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--fast);
+}
+.copy-tooltip.show { opacity: 1; }
+
+/* ── Last updated text ─────────────────────────────────────────── */
+.last-updated {
+  font-size: .75rem;
+  color: var(--text-faint);
+  margin-top: .2rem;
+}
+
 /* ── WhatsApp share button ─────────────────────────────────────── */
 .wa-share-btn {
   height: 34px;
@@ -1195,8 +1239,13 @@ footer {
     <div>
       <div class="results-query" id="resultsTitle"></div>
       <div class="results-meta" id="resultsMeta"></div>
+      <div class="last-updated" id="lastUpdated" style="display:none"></div>
     </div>
     <div class="results-actions">
+      <button class="copy-btn" id="copyBtn" style="display:none" title="Copy cheapest price to clipboard">
+        📋 Copy
+        <span class="copy-tooltip" id="copyTooltip">Copied!</span>
+      </button>
       <select class="sort-select" id="sortSelect">
         <option value="savings">Sort: Best savings</option>
         <option value="price_asc">Sort: Lowest price</option>

@@ -1,5 +1,7 @@
 node_modules
 .git
 *.log
+*.md
+test-*.mjs
 deploy.mjs
 index.html
