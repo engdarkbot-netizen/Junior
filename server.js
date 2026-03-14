@@ -65,12 +65,41 @@ const PROXY_USER = process.env.PROXY_USER || null;
 const PROXY_PASS = process.env.PROXY_PASS || null;
 
 app.use(cors());
+
+/* ─── Pre-gzip grocery.html at startup ─────────────────────────── */
+const fs = require('fs');
+let gzippedHtml = null;
+
+(function warmGroceryHtml() {
+  try {
+    const htmlPath = path.join(__dirname, 'grocery.html');
+    const raw = fs.readFileSync(htmlPath);
+    zlib.gzip(raw, (err, buf) => {
+      if (!err) {
+        gzippedHtml = buf;
+        console.log(`[startup] grocery.html gzipped (${buf.length} bytes)`);
+      }
+    });
+  } catch (e) {
+    console.error('[startup] Could not pre-gzip grocery.html:', e.message);
+  }
+})();
+
 // Serve grocery.html as the homepage (before static so it takes priority over index.html)
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));
+app.get('/', (req, res) => {
+  const ae = req.headers['accept-encoding'] || '';
+  if (gzippedHtml && ae.includes('gzip')) {
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Length', gzippedHtml.length);
+    return res.end(gzippedHtml);
+  }
+  res.sendFile(path.join(__dirname, 'grocery.html'));
+});
 app.use(express.static(path.join(__dirname)));
 
-/* ─── In-memory search cache (5-minute TTL, max 150 entries) ───── */
-const CACHE_TTL = 5 * 60 * 1000;
+/* ─── In-memory search cache (15-minute TTL, max 150 entries) ──── */
+const CACHE_TTL = 15 * 60 * 1000;
 const CACHE_MAX = 150;
 const searchCache = new Map(); // key -> { data, ts }
 
@@ -993,6 +1022,9 @@ app.get('/api/search', rateLimit, async (req, res) => {
     const age = Math.floor((Date.now() - hit.ts) / 1000);
     res.setHeader('X-Cache',     'HIT');
     res.setHeader('X-Cache-Age', `${age}s`);
+    const etag = `"${Buffer.from(hit.data.timestamp).toString('base64').slice(0,12)}"`;
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
     trackSearch(key, age * 1000, true, hit.data.stores);
     return res.json({ ...hit.data, cached: true, cacheAge: age });
   }
@@ -1020,6 +1052,9 @@ app.get('/api/search', rateLimit, async (req, res) => {
     trackSearch(key, Date.now() - t0, false, data.stores);
     recordPriceHistory(key, data.stores);
     checkPriceAlerts(key, data.stores);
+    const etag = `"${Buffer.from(data.timestamp).toString('base64').slice(0,12)}"`;
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
     res.json(data);
   } catch (err) {
     console.error('[search error]', err.message);
@@ -1101,6 +1136,35 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   checkPriceAlerts(key, allResults);
   write('done', finalData);
   res.end();
+});
+
+/* ─── POST /api/search/batch — parallel multi-query search ─────── */
+app.post('/api/search/batch', express.json(), rateLimit, async (req, res) => {
+  const { queries } = req.body || {};
+  if (!Array.isArray(queries) || queries.length === 0) {
+    return res.status(400).json({ error: 'Body must include a non-empty "queries" array' });
+  }
+  if (queries.length > 5) {
+    return res.status(400).json({ error: 'Maximum 5 queries per batch request' });
+  }
+
+  const results = await Promise.all(queries.map(async (q) => {
+    const query = (q || '').trim();
+    if (!query) return { query: q, stores: [] };
+    const key = normalizeQuery(query);
+    const hit = cacheGet(key);
+    if (hit) return { query, stores: hit.data.stores };
+    try {
+      const data = await runScrape(query);
+      cacheSet(key, data);
+      recordPriceHistory(key, data.stores);
+      return { query, stores: data.stores };
+    } catch (err) {
+      return { query, stores: [], error: err.message };
+    }
+  }));
+
+  res.json({ results });
 });
 
 /* ─── In-memory log ring buffer ────────────────────────────────── */
@@ -1349,6 +1413,25 @@ const httpServer = app.listen(PORT, async () => {
   console.log(`║  Mode: ${modeLabel}${' '.repeat(Math.max(0, 38 - modeLabel.length))}║`);
   console.log(`║  Stores: 8  |  Demo catalog: 14 categories  ║`);
   console.log(`╚══════════════════════════════════════════════╝\n`);
+
+  // Cache warming: pre-populate the top 5 most searched terms after a short delay
+  const WARM_TERMS = ['حليب', 'أرز', 'دجاج', 'بيض', 'خبز'];
+  setTimeout(async () => {
+    console.log('[cache-warm] Starting cache warm-up for top terms…');
+    for (const term of WARM_TERMS) {
+      try {
+        const key = normalizeQuery(term);
+        if (!cacheGet(key)) {
+          const data = await runScrape(term);
+          cacheSet(key, data);
+          console.log(`[cache-warm] Warmed: "${term}"`);
+        }
+      } catch (e) {
+        console.error(`[cache-warm] Failed for "${term}":`, e.message);
+      }
+    }
+    console.log('[cache-warm] Cache warm-up complete');
+  }, 2000);
 });
 
 /* ─── Graceful shutdown ─────────────────────────────────────────── */
