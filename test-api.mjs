@@ -1,5 +1,5 @@
 /**
- * GroceryCompare SA — Automated API Test Suite (14 tests)
+ * GroceryCompare SA — Automated API Test Suite (18 tests)
  * Run: node test-api.mjs
  * Assumes server is running at http://localhost:3000
  */
@@ -548,6 +548,139 @@ async function testQuerySanitization() {
   }
 }
 
+// ─── 15. GET /api/version ────────────────────────────────────────────────────
+async function testVersion() {
+  const testName = 'Version — GET /api/version returns version, env, nodeVersion, platform';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/version`);
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  const missing = [];
+  if (typeof body.version     === 'undefined') missing.push('version');
+  if (typeof body.env         === 'undefined') missing.push('env');
+  if (typeof body.nodeVersion === 'undefined') missing.push('nodeVersion');
+  if (typeof body.platform    === 'undefined') missing.push('platform');
+
+  if (missing.length > 0) {
+    fail(testName, `Missing fields: ${missing.join(', ')}`);
+  } else {
+    pass(testName);
+  }
+}
+
+// ─── 16. POST /api/admin/clear-cache ─────────────────────────────────────────
+async function testAdminClearCache() {
+  const testName = 'Admin — POST /api/admin/clear-cache returns cleared count and timestamp';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/admin/clear-cache`, {
+    method: 'POST',
+  });
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  const missing = [];
+  if (typeof body.cleared    === 'undefined') missing.push('cleared');
+  if (typeof body.timestamp  === 'undefined') missing.push('timestamp');
+
+  if (missing.length > 0) {
+    fail(testName, `Missing fields: ${missing.join(', ')}`);
+  } else if (typeof body.cleared !== 'number') {
+    fail(testName, `"cleared" should be a number, got ${typeof body.cleared}`);
+  } else {
+    pass(testName);
+  }
+}
+
+// ─── 17. POST /api/admin/reset-analytics ─────────────────────────────────────
+async function testAdminResetAnalytics() {
+  const testName = 'Admin — POST /api/admin/reset-analytics returns reset:true and timestamp';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/admin/reset-analytics`, {
+    method: 'POST',
+  });
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  const missing = [];
+  if (body.reset     !== true)      missing.push('reset !== true');
+  if (typeof body.timestamp === 'undefined') missing.push('timestamp');
+
+  if (missing.length > 0) {
+    fail(testName, `Missing/wrong fields: ${missing.join(', ')}`);
+  } else {
+    pass(testName);
+  }
+}
+
+// ─── 18. Stats — demoMode, demoReason, alertsCount ───────────────────────────
+async function testStatsExtended() {
+  const testName = 'Stats extended — GET /api/stats includes demoMode, demoReason, alertsCount';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/stats`);
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  const missing = [];
+  if (typeof body.demoMode    === 'undefined') missing.push('demoMode');
+  if (typeof body.demoReason  === 'undefined') missing.push('demoReason');
+  if (typeof body.alertsCount === 'undefined') missing.push('alertsCount');
+
+  if (missing.length > 0) {
+    fail(testName, `Missing fields: ${missing.join(', ')}`);
+  } else {
+    pass(testName);
+  }
+}
+
 // ─── Runner ──────────────────────────────────────────────────────────────────
 async function main() {
   console.log('\nGroceryCompare SA — API Test Suite');
@@ -555,7 +688,7 @@ async function main() {
   console.log('─'.repeat(60));
 
   // Check server availability first
-  console.log('\n[1/14] Health check');
+  console.log('\n[1/18] Health check');
   const serverUp = await testHealthCheck();
 
   if (!serverUp) {
@@ -563,45 +696,57 @@ async function main() {
     console.log('  will be attempted anyway and will show connection errors.\n');
   }
 
-  console.log('\n[2/14] Search validation');
+  console.log('\n[2/18] Search validation');
   await testSearchValidation();
 
-  console.log('\n[3/14] Rate limiting');
+  console.log('\n[3/18] Rate limiting');
   await testRateLimiting();
 
-  console.log('\n[4/14] Demo/real search (milk)');
+  console.log('\n[4/18] Demo/real search (milk)');
   await testSearchMilk();
 
-  console.log('\n[5/14] Arabic search');
+  console.log('\n[5/18] Arabic search');
   await testArabicSearch();
 
-  console.log('\n[6/14] Cache');
+  console.log('\n[6/18] Cache');
   await testCache();
 
-  console.log('\n[7/14] Stats endpoint');
+  console.log('\n[7/18] Stats endpoint');
   await testStats();
 
-  console.log('\n[8/14] Trending');
+  console.log('\n[8/18] Trending');
   await testTrending();
 
-  console.log('\n[9/14] Price history');
+  console.log('\n[9/18] Price history');
   await testPriceHistory();
 
-  console.log('\n[10/14] Create alert');
+  console.log('\n[10/18] Create alert');
   await testCreateAlert();
 
-  console.log('\n[11/14] Get alerts');
+  console.log('\n[11/18] Get alerts');
   await testGetAlerts();
 
-  console.log('\n[12/14] Trending with limit');
+  console.log('\n[12/18] Trending with limit');
   await testTrendingWithLimit();
 
-  console.log('\n[13/14] SSE stream');
+  console.log('\n[13/18] SSE stream');
   await testSSEStream();
 
-  console.log('\n[14/14] Query sanitization');
+  console.log('\n[14/18] Query sanitization');
   await testQueryTooLong();
   await testQuerySanitization();
+
+  console.log('\n[15/18] Version endpoint');
+  await testVersion();
+
+  console.log('\n[16/18] Admin clear-cache');
+  await testAdminClearCache();
+
+  console.log('\n[17/18] Admin reset-analytics');
+  await testAdminResetAnalytics();
+
+  console.log('\n[18/18] Stats extended fields');
+  await testStatsExtended();
 
   // ─── Summary ───────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(60));
