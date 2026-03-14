@@ -1173,7 +1173,8 @@ footer {
     <div class="search-wrap" id="searchWrap">
       <input id="searchInput" type="text"
              placeholder="Search any product… (milk, rice, chicken)"
-             autocomplete="off" spellcheck="false" />
+             autocomplete="off" spellcheck="false"
+             aria-label="Search for grocery products in Arabic or English" />
       <button class="search-btn" id="searchBtn" title="Search (Enter)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
@@ -1181,11 +1182,11 @@ footer {
     </div>
 
     <div class="header-actions">
-      <button class="basket-btn" id="basketBtn" title="Shopping basket">
+      <button class="basket-btn" id="basketBtn" title="Shopping basket" aria-label="Basket, 0 items">
         🛍️ Basket
         <span class="basket-count" id="basketCount" style="display:none">0</span>
       </button>
-      <button class="icon-btn" id="themeBtn" title="Toggle dark mode">🌙</button>
+      <button class="icon-btn" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
     </div>
   </div>
 </div>
@@ -1232,7 +1233,7 @@ footer {
   </section>
 
   <!-- Loading -->
-  <div id="loading">
+  <div id="loading" role="status" aria-live="polite" aria-label="Loading search results">
     <div class="loading-header">
       <div class="loading-title">
         Fetching live prices
@@ -1245,13 +1246,17 @@ footer {
   </div>
 
   <!-- Error -->
-  <div id="error-box">
-    <span class="empty-icon">⚠️</span>
-    <h3>Could not reach the server</h3>
-    <p class="empty-sub">
-      Make sure the backend is running.<br>
-      <code>node server.js</code>
+  <div id="error-box" role="alert" aria-live="assertive">
+    <span class="empty-icon" id="errorIcon">⚠️</span>
+    <h3 id="errorTitle">Search failed — please try again</h3>
+    <p class="empty-sub" id="errorSub">
+      A network or server error occurred while fetching prices.
     </p>
+    <button id="errorRetryBtn" onclick="if(currentQuery){window.doSearch?window.doSearch(currentQuery):doSearch(currentQuery);}"
+      style="margin-top:1.25rem;padding:.6rem 1.5rem;background:var(--green-mid);color:#fff;border:none;border-radius:var(--r-md);font-family:inherit;font-size:.9rem;font-weight:600;cursor:pointer;transition:background var(--fast)"
+      onmouseover="this.style.background='var(--green)'" onmouseout="this.style.background='var(--green-mid)'">
+      ↺ Retry search
+    </button>
   </div>
 
   <!-- Demo notice -->
@@ -1273,7 +1278,7 @@ footer {
   </div>
 
   <!-- Results bar -->
-  <div id="results-bar">
+  <div id="results-bar" role="status" aria-live="polite">
     <div>
       <div class="results-query" id="resultsTitle"></div>
       <div class="results-meta" id="resultsMeta"></div>
@@ -1617,6 +1622,7 @@ async function doSearch(rawQuery) {
   hide('results-bar');
   hide('no-results');
   hide('error-box');
+  const _retryBtn = $('errorRetryBtn'); if (_retryBtn) _retryBtn.disabled = false;
   $('best-store-card').classList.remove('visible');
   $('store-filter').classList.remove('visible');
   $('demo-notice').classList.remove('visible');
@@ -1720,11 +1726,39 @@ async function doSearch(rawQuery) {
         setTimeout(() => renderResults(data, ms), 200);
       } catch (e2) {
         $('loading').style.display = 'none';
-        show('error-box');
-        setStatus('⚠️ ' + e2.message, 'error');
+        const statusCode = e2.message.match(/HTTP (\d+)/)?.[1];
+        if (statusCode === '429') {
+          $('errorIcon').textContent = '🚦';
+          $('errorTitle').textContent = 'Too many searches — please wait a moment';
+          $('errorSub').innerHTML = 'You\'ve made too many requests in a short time.<br>Please wait <strong id="rateLimitCountdown">30</strong> seconds and try again.';
+          show('error-box');
+          setStatus('🚦 Rate limited — please wait', 'error');
+          let secs = 30;
+          const countdownEl = document.getElementById('rateLimitCountdown');
+          const retryBtn = $('errorRetryBtn');
+          if (retryBtn) retryBtn.disabled = true;
+          const countdownTimer = setInterval(() => {
+            secs--;
+            if (countdownEl) countdownEl.textContent = secs;
+            if (secs <= 0) {
+              clearInterval(countdownTimer);
+              if (retryBtn) retryBtn.disabled = false;
+              setStatus('');
+            }
+          }, 1000);
+        } else {
+          $('errorIcon').textContent = '⚠️';
+          $('errorTitle').textContent = 'Search failed — please try again';
+          $('errorSub').textContent = 'A network or server error occurred while fetching prices.';
+          show('error-box');
+          setStatus('⚠️ ' + e2.message, 'error');
+        }
       }
     } else {
       $('loading').style.display = 'none';
+      $('errorIcon').textContent = '⚠️';
+      $('errorTitle').textContent = 'Search failed — please try again';
+      $('errorSub').textContent = 'A network or server error occurred while fetching prices.';
       show('error-box');
       setStatus('⚠️ ' + err.message, 'error');
     }
@@ -1766,10 +1800,27 @@ function renderResults(data, ms) {
   if (!storesWithProducts.length) {
     show('no-results');
     $('noResultsQuery').textContent = data.query;
-    // Populate popular search chips in no-results panel
+    // Populate popular search chips in no-results panel with POPULAR_AR suggestions
     const chips = $('noResultsChips');
     if (chips) {
-      chips.innerHTML = POPULAR.slice(0, 8).map(p =>
+      // Pick 3 suggestions from POPULAR_AR different from current query
+      const suggestions = POPULAR_AR.filter(p => p.toLowerCase() !== data.query.toLowerCase()).slice(0, 3);
+      // Update or create the "Did you mean" line
+      const noResultsDiv = $('no-results');
+      let dymEl = noResultsDiv.querySelector('#noResultsDidYouMean');
+      if (!dymEl) {
+        dymEl = document.createElement('p');
+        dymEl.id = 'noResultsDidYouMean';
+        dymEl.style.cssText = 'font-size:.85rem;color:var(--text-muted);margin:.75rem 0 .25rem';
+        chips.parentNode.insertBefore(dymEl, chips);
+      }
+      if (suggestions.length) {
+        dymEl.innerHTML = `Did you mean: ${suggestions.map(s => `<strong>${sanitize(s)}</strong>`).join(', ')}?`;
+        dymEl.style.display = '';
+      } else {
+        dymEl.style.display = 'none';
+      }
+      chips.innerHTML = POPULAR_AR.slice(0, 8).map(p =>
         `<button class="ps-chip">${sanitize(p)}</button>`
       ).join('');
       chips.querySelectorAll('.ps-chip').forEach(btn => {
@@ -2208,6 +2259,9 @@ function renderBasket() {
   } else {
     countEl.style.display = 'none';
   }
+  // Update basket button aria-label with current count
+  const basketBtn = $('basketBtn');
+  if (basketBtn) basketBtn.setAttribute('aria-label', `Basket, ${count} item${count !== 1 ? 's' : ''}`);
   const emptyEl  = $('basketEmpty');
   const listEl   = $('basketItemsList');
   const footerEl = $('basketFooter');
