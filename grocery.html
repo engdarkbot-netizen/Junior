@@ -19,6 +19,14 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="GroceryCompare SA" />
   <meta name="twitter:description" content="Compare live grocery prices across Saudi Arabia's top supermarkets." />
+  <!-- Arabic SEO meta tags -->
+  <meta name="description" content="قارن أسعار البقالة في السعودية — نون، كارفور، بنده، دانوب، لولو، التميمي، العثيم، بن داود">
+  <meta property="og:title" content="GroceryCompare SA — مقارنة أسعار البقالة">
+  <meta property="og:description" content="قارن أسعار البقالة الآن في ٨ متاجر سعودية في ثوانٍ">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="GroceryCompare SA">
+  <meta name="twitter:description" content="قارن أسعار البقالة في السعودية — ٨ متاجر في ثوانٍ">
   <!-- Structured Data -->
   <script type="application/ld+json">
   {
@@ -1451,19 +1459,22 @@ function renderPopularChips(items, labelText) {
   });
 }
 
+// Hardcoded popular Arabic terms shown when no trending data available
+const POPULAR_AR = ['حليب المراعي', 'أرز بسمتي', 'زيت دوار الشمس', 'بيض المراعي', 'دجاج مبرد'];
+
 // Populate chips: try live trending first, fall back to static list
 (async () => {
   try {
     const r = await fetch('/api/trending?limit=8', { signal: AbortSignal.timeout(2000) });
     if (r.ok) {
       const { trending } = await r.json();
-      if (trending && trending.length >= 3) {
+      if (trending && trending.length >= 1) {
         renderPopularChips(trending.map(t => t.query), '🔥 Trending:');
         return;
       }
     }
   } catch (_) {}
-  renderPopularChips(POPULAR.slice(0, 8), 'Try:');
+  renderPopularChips(POPULAR_AR, 'Try:');
 })();
 
 // Populate hero stats from /api/stats

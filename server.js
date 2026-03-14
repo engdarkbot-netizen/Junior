@@ -109,6 +109,12 @@ function recordPriceHistory(nKey, stores) {
   priceHistory.set(nKey, observations);
 }
 
+/* ─── In-memory price alerts ────────────────────────────────────
+ * key: `${email}:${nKey}`, value: { email, query, targetPrice, createdAt }
+ * Max 5 alerts per email address.
+ * ────────────────────────────────────────────────────────────── */
+const priceAlerts = new Map();
+
 /* ─── In-flight request deduplication ─────────────────────────── */
 const inflight = new Map(); // key -> Promise
 
@@ -942,6 +948,22 @@ async function runScrape(query) {
   };
 }
 
+/* ─── Price alert checker (called after each search) ───────────── */
+function checkPriceAlerts(nKey, stores) {
+  const prices = [];
+  (stores || []).forEach(s => {
+    (s.products || []).forEach(p => { if (p.price > 0) prices.push(p.price); });
+  });
+  if (!prices.length) return;
+  const lowestPrice = Math.min(...prices);
+
+  for (const [key, alert] of priceAlerts) {
+    if (alert.query === nKey && lowestPrice <= alert.targetPrice) {
+      console.log(`[alert] FIRED for ${alert.email} — "${nKey}" lowest price ${lowestPrice} <= target ${alert.targetPrice} (email sending is future work)`);
+    }
+  }
+}
+
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
 app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
@@ -982,6 +1004,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     cacheSet(key, data);
     trackSearch(key, Date.now() - t0, false, data.stores);
     recordPriceHistory(key, data.stores);
+    checkPriceAlerts(key, data.stores);
     res.json(data);
   } catch (err) {
     console.error('[search error]', err.message);
@@ -1060,6 +1083,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults);
   recordPriceHistory(key, allResults);
+  checkPriceAlerts(key, allResults);
   write('done', finalData);
   res.end();
 });
@@ -1129,6 +1153,46 @@ app.get('/api/basket', rateLimit, async (req, res) => {
     });
 
   res.json({ queries, stores, timestamp: new Date().toISOString() });
+});
+
+/* ─── POST /api/alerts — create a price alert ──────────────────── */
+app.post('/api/alerts', express.json(), (req, res) => {
+  const { email, query, targetPrice } = req.body || {};
+
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'Invalid or missing email' });
+  }
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Invalid or missing query' });
+  }
+  const price = parseFloat(targetPrice);
+  if (isNaN(price) || price <= 0) {
+    return res.status(400).json({ error: 'targetPrice must be a number greater than 0' });
+  }
+
+  const nKey = normalizeQuery(query.trim());
+  const alertKey = `${email}:${nKey}`;
+
+  // Enforce max 5 alerts per email
+  const emailAlerts = [...priceAlerts.values()].filter(a => a.email === email);
+  if (emailAlerts.length >= 5 && !priceAlerts.has(alertKey)) {
+    return res.status(400).json({ error: 'Maximum 5 alerts per email address' });
+  }
+
+  const alert = { email, query: nKey, targetPrice: price, createdAt: new Date().toISOString() };
+  priceAlerts.set(alertKey, alert);
+
+  res.status(201).json({ success: true, alertId: alertKey, alert });
+});
+
+/* ─── GET /api/alerts — list alerts for an email ───────────────── */
+app.get('/api/alerts', (req, res) => {
+  const email = (req.query.email || '').trim();
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Invalid or missing email query parameter' });
+  }
+  const alerts = [...priceAlerts.values()].filter(a => a.email === email);
+  res.json({ email, alerts });
 });
 
 /* ─── GET /api/trending — top searched queries ─────────────────── */
