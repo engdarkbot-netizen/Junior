@@ -1735,6 +1735,9 @@ function renderResults(data, ms) {
     demoNotice.classList.remove('visible');
   }
 
+  // Update page title for useful browser history
+  document.title = `${data.query} (${totalProducts} prices) — GroceryCompare SA`;
+
   // Results bar
   show('results-bar');
   $('addAllBtn').style.display = '';
@@ -1926,6 +1929,57 @@ function renderResults(data, ms) {
   // Errors in status bar
   if (errors.length) {
     setStatus(`⚠️ Couldn't fetch from: ${errors.map(s => s.name).join(', ')} — sites may be blocking scrapers`, 'warning');
+  }
+
+  // "Last updated" timestamp
+  const lastUpdatedEl = $('lastUpdated');
+  if (lastUpdatedEl) {
+    lastUpdatedEl.style.display = '';
+    if (data.timestamp) {
+      const ts = new Date(data.timestamp);
+      const diffMs = Date.now() - ts.getTime();
+      const diffMin = Math.round(diffMs / 60000);
+      const timeStr = diffMin < 1 ? 'just now' : diffMin === 1 ? '1 minute ago' : `${diffMin} minutes ago`;
+      lastUpdatedEl.textContent = `Last updated: ${timeStr}`;
+    } else {
+      lastUpdatedEl.textContent = 'Last updated: just now';
+    }
+  }
+
+  // "Copy cheapest price" button
+  const copyBtn = $('copyBtn');
+  if (copyBtn) {
+    if (allPrices.length) {
+      copyBtn.style.display = '';
+      // Find the globally cheapest product name and store name
+      let cpName = data.query, cpStore = '';
+      for (const s of sorted) {
+        const p = s.products.find(pr => pr.price === globalMin);
+        if (p) { cpName = p.name || data.query; cpStore = s.name; break; }
+      }
+      const copyText = `${cpName} — ${globalMin.toFixed(2)} SAR at ${cpStore}`;
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(copyText);
+        } catch (_) {
+          // Fallback for older browsers
+          const ta = document.createElement('textarea');
+          ta.value = copyText;
+          ta.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        const tip = $('copyTooltip');
+        if (tip) {
+          tip.classList.add('show');
+          setTimeout(() => tip.classList.remove('show'), 1500);
+        }
+      };
+    } else {
+      copyBtn.style.display = 'none';
+    }
   }
 
   // WhatsApp share button — share cheapest price found (Arabic format)

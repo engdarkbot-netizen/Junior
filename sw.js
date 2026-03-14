@@ -23,7 +23,28 @@ self.addEventListener('fetch', e => {
   const { request } = e;
   const url = new URL(request.url);
 
-  // Network-first for API calls (fresh prices)
+  // Cache-first for stable API endpoints (trending, health)
+  if (url.pathname === '/api/trending' || url.pathname === '/api/health') {
+    e.respondWith(
+      caches.match(request).then(cached => {
+        if (cached) return cached;
+        return fetch(request).then(res => {
+          if (res.ok && request.method === 'GET') {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(request, clone));
+          }
+          return res;
+        }).catch(() =>
+          new Response(JSON.stringify({ error: 'Offline — no cached data' }), {
+            headers: { 'Content-Type': 'application/json' },
+          })
+        );
+      })
+    );
+    return;
+  }
+
+  // Network-first for all other API calls (fresh prices)
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(request).catch(() =>
