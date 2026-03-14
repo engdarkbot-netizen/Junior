@@ -78,12 +78,41 @@ const PROXY_USER = process.env.PROXY_USER || null;
 const PROXY_PASS = process.env.PROXY_PASS || null;
 
 app.use(cors());
+
+/* ─── Pre-gzip grocery.html at startup ─────────────────────────── */
+const fs = require('fs');
+let gzippedHtml = null;
+
+(function warmGroceryHtml() {
+  try {
+    const htmlPath = path.join(__dirname, 'grocery.html');
+    const raw = fs.readFileSync(htmlPath);
+    zlib.gzip(raw, (err, buf) => {
+      if (!err) {
+        gzippedHtml = buf;
+        console.log(`[startup] grocery.html gzipped (${buf.length} bytes)`);
+      }
+    });
+  } catch (e) {
+    console.error('[startup] Could not pre-gzip grocery.html:', e.message);
+  }
+})();
+
 // Serve grocery.html as the homepage (before static so it takes priority over index.html)
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));
+app.get('/', (req, res) => {
+  const ae = req.headers['accept-encoding'] || '';
+  if (gzippedHtml && ae.includes('gzip')) {
+    res.setHeader('Content-Encoding', 'gzip');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Length', gzippedHtml.length);
+    return res.end(gzippedHtml);
+  }
+  res.sendFile(path.join(__dirname, 'grocery.html'));
+});
 app.use(express.static(path.join(__dirname)));
 
-/* ─── In-memory search cache (5-minute TTL, max 150 entries) ───── */
-const CACHE_TTL = 5 * 60 * 1000;
+/* ─── In-memory search cache (15-minute TTL, max 150 entries) ──── */
+const CACHE_TTL = 15 * 60 * 1000;
 const CACHE_MAX = 150;
 const searchCache = new Map(); // key -> { data, ts }
 
@@ -101,6 +130,32 @@ function cacheSet(key, data) {
   }
   searchCache.set(key, { data, ts: Date.now() });
 }
+
+/* ─── In-memory price history (server-side) ────────────────────
+ * Stores last 10 lowest-price observations per normalised query.
+ * Structure: Map<nKey, Array<{ lowestPrice, ts }>>
+ * ────────────────────────────────────────────────────────────── */
+const PRICE_HISTORY_MAX = 10;
+const priceHistory = new Map(); // nKey -> [{ lowestPrice, ts }, ...]
+
+function recordPriceHistory(nKey, stores) {
+  const prices = [];
+  (stores || []).forEach(s => {
+    (s.products || []).forEach(p => { if (p.price > 0) prices.push(p.price); });
+  });
+  if (!prices.length) return;
+  const lowestPrice = Math.min(...prices);
+  const observations = priceHistory.get(nKey) || [];
+  observations.push({ lowestPrice, ts: new Date().toISOString() });
+  if (observations.length > PRICE_HISTORY_MAX) observations.shift();
+  priceHistory.set(nKey, observations);
+}
+
+/* ─── In-memory price alerts ────────────────────────────────────
+ * key: `${email}:${nKey}`, value: { email, query, targetPrice, createdAt }
+ * Max 5 alerts per email address.
+ * ────────────────────────────────────────────────────────────── */
+const priceAlerts = new Map();
 
 /* ─── In-flight request deduplication ─────────────────────────── */
 const inflight = new Map(); // key -> Promise
@@ -135,7 +190,10 @@ function trackSearch(nKey, ms, cached, stores, originalQuery) {
       if (!analytics.storeResults.has(s.id))
         analytics.storeResults.set(s.id, { success: 0, fail: 0, totalProducts: 0 });
       const r = analytics.storeResults.get(s.id);
-      if (s.error && !(s.products && s.products.length)) r.fail++;
+      if (s.error && !(s.products && s.products.length)) {
+        r.fail++;
+        r.lastError = { message: s.error, timestamp: new Date().toISOString() };
+      }
       else { r.success++; r.totalProducts += s.products ? s.products.length : 0; }
     });
   }
@@ -190,65 +248,272 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ─── Demo mode (auto-enabled when browser unavailable) ────────── */
+/* ─── Demo mode ─────────────────────────────────────────────────
+ * Auto-enabled when:
+ *  a) Playwright/Chromium is unavailable, OR
+ *  b) No PROXY_URL is configured (Saudi stores block non-Saudi IPs,
+ *     so scraping from Railway/Render US datacenter always returns 0)
+ * ────────────────────────────────────────────────────────────── */
 let DEMO_MODE = false;
+let DEMO_REASON = null; // 'no_proxy' | 'browser_unavailable' | 'forced' | null
 
-// Check browser availability at startup
-(async () => {
-  try {
-    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-    await testBrowser.close();
-  } catch (_) {
-    DEMO_MODE = true;
-    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
-  }
-})();
+if (process.env.FORCE_DEMO === '1' || process.env.FORCE_DEMO === 'true') {
+  DEMO_MODE = true;
+  DEMO_REASON = 'forced';
+  console.log('⚠️  FORCE_DEMO=1 — running in DEMO MODE');
+}
 
-const DEMO_PRODUCTS = {
-  default: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة كامل الدسم ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك ١ لتر', price: 4.50, image: '', url: '#' },
-  ],
-  milk: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
-    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
-  ],
-  حليب: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
-    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
-  ],
-  rice: [
-    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
-    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
-    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
-  ],
-  أرز: [
-    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
-    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
-    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
-  ],
-  water: [
-    { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)', price: 11.50, image: '', url: '#' },
-    { name: 'مياه بيتا ١.٥ لتر', price: 1.95, image: '', url: '#' },
-    { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price: 9.75, image: '', url: '#' },
-  ],
-  eggs: [
-    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
-    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
-  ],
-  بيض: [
-    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
-    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
-  ],
-};
+if (!PROXY_URL) {
+  DEMO_MODE = true;
+  DEMO_REASON = 'no_proxy';
+  console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
+} else {
+  // Only test browser when a proxy is configured and scraping may work
+  (async () => {
+    try {
+      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+      await testBrowser.close();
+    } catch (_) {
+      DEMO_MODE = true;
+      DEMO_REASON = 'browser_unavailable';
+      console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+    }
+  })();
+}
+
+// Each category entry: keywords (Arabic/English) that map to its products
+const DEMO_CATALOG = [
+  {
+    keywords: ['milk', 'حليب', 'حلب', 'مراعي', 'الجهينه', 'جهينه', 'نادك'],
+    products: [
+      { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+      { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+      { name: 'حليب الجهينة طازج ٢ لتر',        price: 7.95, image: '', url: '#' },
+      { name: 'حليب نادك كامل الدسم ١ لتر',     price: 4.50, image: '', url: '#' },
+      { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['rice', 'أرز', 'ارز', 'بسمتي', 'السله', 'الكيف'],
+    products: [
+      { name: 'أرز السلة بسمتي ٢ كجم',              price: 14.95, image: '', url: '#' },
+      { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم',  price: 32.50, image: '', url: '#' },
+      { name: 'أرز المراعي بسمتي ١ كجم',            price:  8.75, image: '', url: '#' },
+      { name: 'أرز تمر هندي بسمتي ٢ كجم',           price: 13.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['water', 'مياه', 'ماء', 'نيوم', 'بيتا', 'مياة'],
+    products: [
+      { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)',     price: 11.50, image: '', url: '#' },
+      { name: 'مياه بيتا ١.٥ لتر',               price:  1.95, image: '', url: '#' },
+      { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price:  9.75, image: '', url: '#' },
+      { name: 'مياه هنا ١.٥ لتر (٦ عبوات)',     price: 10.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['eggs', 'egg', 'بيض', 'بيضه', 'بيضة'],
+    products: [
+      { name: 'بيض المراعي وايت ٣٠ بيضة',  price: 19.95, image: '', url: '#' },
+      { name: 'بيض بلدي طازج ١٥ بيضة',    price: 13.50, image: '', url: '#' },
+      { name: 'بيض الوطنية ٣٠ بيضة',       price: 18.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['bread', 'خبز', 'عيش', 'تميس', 'صامولي', 'بالدي'],
+    products: [
+      { name: 'خبز عيش بلدي (١٠ أرغفة)',         price:  2.50, image: '', url: '#' },
+      { name: 'خبز صامولي أبيض كبير (٦ حبات)',    price:  4.75, image: '', url: '#' },
+      { name: 'خبز تميس كامل الحبة (٥ حبات)',     price:  5.95, image: '', url: '#' },
+      { name: 'خبز التوست الذهبي بر ٥٠٠ جم',      price:  6.25, image: '', url: '#' },
+      { name: 'خبز الحبوب الكاملة لوزان ٤٠٠ جم', price:  8.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['chicken', 'دجاج', 'فراخ', 'فروج', 'كنتاكي', 'مبرد'],
+    products: [
+      { name: 'دجاج كامل طازج مبرد (١.٨ كجم تقريباً)', price: 22.95, image: '', url: '#' },
+      { name: 'صدر دجاج طازج مبرد ١ كجم',              price: 19.50, image: '', url: '#' },
+      { name: 'أفخاذ دجاج مبردة ١ كجم',               price: 14.75, image: '', url: '#' },
+      { name: 'دجاج مقطع ٨ قطع مبرد',                  price: 26.95, image: '', url: '#' },
+      { name: 'فيليه دجاج مجمد نادك ٩٠٠ جم',           price: 24.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['oil', 'زيت', 'زيوت', 'نخيل', 'ذرة', 'طبخ', 'cooking'],
+    products: [
+      { name: 'زيت دوار الشمس نيدو ١.٥ لتر',    price: 14.95, image: '', url: '#' },
+      { name: 'زيت الذرة المراعي ١.٨ لتر',       price: 16.50, image: '', url: '#' },
+      { name: 'زيت زيتون بكر ممتاز لوزيان ٧٥٠مل', price: 34.95, image: '', url: '#' },
+      { name: 'زيت نخيل مكرر ١.٥ لتر',           price: 11.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['sugar', 'سكر', 'سكره', 'محلى'],
+    products: [
+      { name: 'سكر أبيض ناعم ٢ كجم',       price:  8.25, image: '', url: '#' },
+      { name: 'سكر قصب بني ١ كجم',          price:  9.50, image: '', url: '#' },
+      { name: 'سكر أبيض ٥ كجم المراعي',    price: 18.75, image: '', url: '#' },
+      { name: 'سكر بودرة ناعم ٥٠٠ جم',     price:  5.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['coffee', 'قهوة', 'قهوه', 'نسكافيه', 'نسكافيه', 'كافيه', 'espresso', 'nescafe'],
+    products: [
+      { name: 'نسكافيه كلاسيك ٢٠٠ جم',            price: 34.95, image: '', url: '#' },
+      { name: 'قهوة عربية بالهيل المراعي ٢٥٠ جم', price: 22.50, image: '', url: '#' },
+      { name: 'قهوة نسبريسو كبسولات ١٠ حبة',      price: 49.95, image: '', url: '#' },
+      { name: 'نسكافيه جولد ٢٠٠ جم',              price: 52.50, image: '', url: '#' },
+      { name: 'قهوة دانكن دونتس أصلي ٢٨٦ جم',    price: 39.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['dates', 'تمر', 'تمور', 'عجوه', 'مجدول', 'خلاص', 'سكري'],
+    products: [
+      { name: 'تمر سكري فاخر ١ كجم',       price: 28.95, image: '', url: '#' },
+      { name: 'تمر مجدول مغربي ٥٠٠ جم',   price: 39.95, image: '', url: '#' },
+      { name: 'تمر عجوة المدينة ٥٠٠ جم',  price: 45.00, image: '', url: '#' },
+      { name: 'تمر خلاص فاخر ١ كجم',      price: 32.50, image: '', url: '#' },
+      { name: 'تمر صفاوي ١ كجم',           price: 24.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['yogurt', 'زبادي', 'زباده', 'يوغرت', 'لبن رايب', 'لبن'],
+    products: [
+      { name: 'زبادي المراعي طبيعي ٤ × ١٧٠ جم', price:  8.50, image: '', url: '#' },
+      { name: 'زبادي الجهينة بالفراولة ١٧٠ جم', price:  2.75, image: '', url: '#' },
+      { name: 'لبن رايب المراعي ٤٠٠ مل',         price:  5.25, image: '', url: '#' },
+      { name: 'زبادي يوناني لاكنوز ١٥٠ جم',      price:  3.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['cheese', 'جبن', 'جبنه', 'جبنة', 'كريم', 'شيدر', 'موزاريلا'],
+    products: [
+      { name: 'جبن شيدر كرافت شرائح ٢٠٠ جم',      price: 16.95, image: '', url: '#' },
+      { name: 'جبن كريمي فيلادلفيا ١٧٥ جم',        price: 18.50, image: '', url: '#' },
+      { name: 'جبن أبيض طري المراعي ٥٠٠ جم',       price: 14.25, image: '', url: '#' },
+      { name: 'جبن موزاريلا مبشور ٢٠٠ جم',         price: 19.95, image: '', url: '#' },
+      { name: 'جبن حلوم مشوي الطيبات ٢٥٠ جم',      price: 22.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['tomato', 'tomatoes', 'طماطم', 'طمطم', 'بندوره', 'بندورة'],
+    products: [
+      { name: 'طماطم طازجة ١ كجم',              price:  4.95, image: '', url: '#' },
+      { name: 'طماطم كرزية ٢٥٠ جم',            price:  6.50, image: '', url: '#' },
+      { name: 'معجون طماطم هاينز ١٣٥ جم',      price:  4.25, image: '', url: '#' },
+      { name: 'صلصة طماطم إيطالية باريلا ٤٠٠ جم', price: 11.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['onion', 'onions', 'بصل', 'بصله', 'ثوم'],
+    products: [
+      { name: 'بصل أبيض طازج ١ كجم',    price:  3.95, image: '', url: '#' },
+      { name: 'بصل أحمر طازج ١ كجم',    price:  4.50, image: '', url: '#' },
+      { name: 'ثوم طازج رأس (٣ رؤوس)', price:  5.25, image: '', url: '#' },
+      { name: 'بصل أخضر (٢٠٠ جم)',      price:  2.95, image: '', url: '#' },
+    ],
+  },
+  /* ── NEW CATEGORIES (Iteration 8) ─────────────────────────── */
+  {
+    keywords: ['pasta', 'macaroni', 'معكرونة', 'مكرونة', 'مكارونة', 'باريلا', 'سباغيتي'],
+    products: [
+      { name: 'مكرونة باريلا سباغيتي ٥٠٠ جم',         price:  9.50, image: '', url: '#' },
+      { name: 'مكرونة باريلا بيني ٥٠٠ جم',            price:  9.50, image: '', url: '#' },
+      { name: 'مكرونة ملوكي سباغيتي ٩٠٠ جم',          price:  5.95, image: '', url: '#' },
+      { name: 'مكرونة ماما سباغيتي ٤٠٠ جم',           price:  3.75, image: '', url: '#' },
+      { name: 'مكرونة المراعي فيتوتشيني ٥٠٠ جم',      price:  7.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['laundry', 'detergent', 'washing powder', 'مسحوق غسيل', 'ارييل', 'تايد', 'persil', 'ariel', 'tide'],
+    products: [
+      { name: 'مسحوق غسيل أريال أوتوماتيك ٣ كجم',     price: 39.95, image: '', url: '#' },
+      { name: 'مسحوق غسيل تايد بلاس ٤ كجم',           price: 45.50, image: '', url: '#' },
+      { name: 'مسحوق غسيل برسيل ملونات ٢.٥ كجم',      price: 34.95, image: '', url: '#' },
+      { name: 'مسحوق غسيل OMO نشط ٣ كجم',             price: 29.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['baby formula', 'infant formula', 'حليب اطفال', 'حليب أطفال', 'نان', 'سيميلاك', 'similac', 'nan', 'aptamil'],
+    products: [
+      { name: 'حليب نان أوبتيبرو ١ للرضع ٠-٦ أشهر ٩٠٠ جم',  price: 129.95, image: '', url: '#' },
+      { name: 'حليب سيميلاك أدفانس ١ للرضع ٩٠٠ جم',         price: 115.00, image: '', url: '#' },
+      { name: 'حليب أبتاميل ١ للرضع ٩٠٠ جم',                price: 135.00, image: '', url: '#' },
+      { name: 'حليب نان كومفورت ١ للرضع ٨٠٠ جم',            price: 119.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['juice', 'عصير', 'عصائر', 'المراعي عصير', 'راني', 'rani', 'almarai juice', 'تروبيكانا', 'tropicana'],
+    products: [
+      { name: 'عصير المراعي برتقال ١ لتر',              price:  7.50, image: '', url: '#' },
+      { name: 'عصير راني مانجو ١.٥ لتر',                price:  8.95, image: '', url: '#' },
+      { name: 'عصير تروبيكانا برتقال ١ لتر',            price: 14.95, image: '', url: '#' },
+      { name: 'عصير المراعي تفاح ١ لتر',                price:  7.50, image: '', url: '#' },
+      { name: 'عصير راني خوخ ٢٥٠ مل (٦ علب)',          price: 12.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['chips', 'snacks', 'crisps', 'شيبس', 'بطاطس', 'بطاطا', 'ليز', 'pringles', 'lays'],
+    products: [
+      { name: 'شيبس ليز كلاسيك ١٦٧ جم',               price: 12.95, image: '', url: '#' },
+      { name: 'شيبس برينجلز أوريجينال ١٦٥ جم',         price: 14.50, image: '', url: '#' },
+      { name: 'شيبس تام تام ببرونية ١٢٠ جم',           price:  6.95, image: '', url: '#' },
+      { name: 'شيبس ليز بالجبنة ١٦٧ جم',              price: 12.95, image: '', url: '#' },
+      { name: 'شيبس ميكسد نكهات متعددة ٢٤ كيس',       price: 29.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['tissues', 'paper towels', 'مناديل', 'كلينكس', 'ورق', 'kleenex', 'tissue', 'napkins'],
+    products: [
+      { name: 'مناديل كلينكس ناعمة ٢ طبقة ١٠٠ × ٤ علب', price: 19.95, image: '', url: '#' },
+      { name: 'مناديل ورقية عيش الغراب ٢٠٠ ورقة',      price:  7.50, image: '', url: '#' },
+      { name: 'مناديل كلينكس منثول ٦٠ ورقة',           price:  6.95, image: '', url: '#' },
+      { name: 'ورق مطبخ باون باور ٢ لفة',              price:  9.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['shampoo', 'شامبو', 'هيد اند شولدرز', 'head shoulders', 'pantene', 'pantin', 'dove shampoo'],
+    products: [
+      { name: 'شامبو هيد آند شولدرز ضد القشرة ٤٠٠ مل', price: 24.95, image: '', url: '#' },
+      { name: 'شامبو بانتين للشعر الجاف ٤٠٠ مل',       price: 22.50, image: '', url: '#' },
+      { name: 'شامبو داف موتشر ٤٠٠ مل',                price: 21.95, image: '', url: '#' },
+      { name: 'شامبو لوريال برو ليسيك ٤٠٠ مل',         price: 34.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['diapers', 'nappies', 'حفاضات', 'حفاضه', 'بامبرز', 'هاجيز', 'pampers', 'huggies'],
+    products: [
+      { name: 'حفاضات بامبرز مقاس ٤ (٩-١٤ كجم) ٤٤ حبة',    price: 69.95, image: '', url: '#' },
+      { name: 'حفاضات هاجيز ناتشرا كير مقاس ٤ ٤٢ حبة',     price: 64.95, image: '', url: '#' },
+      { name: 'حفاضات بامبرز نيو بيبي مقاس ٣ ٥٦ حبة',      price: 74.95, image: '', url: '#' },
+      { name: 'حفاضات هاجيز بلس مقاس ٥ ٣٦ حبة',            price: 59.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['canned', 'foul', 'hummus', 'tuna', 'فول', 'حمص', 'تونة', 'معلبات', 'فول مدمس'],
+    products: [
+      { name: 'فول مدمس السنونو ٤٠٠ جم',               price:  4.25, image: '', url: '#' },
+      { name: 'حمص بالطحينة شاميات ٤٠٠ جم',            price:  5.50, image: '', url: '#' },
+      { name: 'تونة بالزيت بيلاكو ١٧٠ جم',            price:  8.95, image: '', url: '#' },
+      { name: 'فول مدمس بالزيتون سيف ٤٠٠ جم',          price:  4.75, image: '', url: '#' },
+      { name: 'تونة باراميون بالماء ٣ × ١٧٠ جم',       price: 22.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['frozen', 'frozen meals', 'وجبات مجمدة', 'بيتزا مجمدة', 'مجمد', 'pizza frozen', 'frozen food'],
+    products: [
+      { name: 'بيتزا دكتور أوتكر مارغريتا مجمدة ٣٣٠ جم',  price: 24.95, image: '', url: '#' },
+      { name: 'برغر دجاج مجمد نادك ٤ قطع ٤٠٠ جم',         price: 29.95, image: '', url: '#' },
+      { name: 'سمبوسة لحم مجمدة ٢٠ قطعة ٤٠٠ جم',          price: 19.95, image: '', url: '#' },
+      { name: 'وجبة كبسة دجاج مجمدة كاملة ٨٠٠ جم',        price: 39.95, image: '', url: '#' },
+      { name: 'نقانق دجاج مجمد نادك ٤٠٠ جم',              price: 18.50, image: '', url: '#' },
+    ],
+  },
+];
+
+// Default fallback (milk — most commonly searched)
+const DEMO_DEFAULT = DEMO_CATALOG[0].products;
 
 // Price variance per store (±%) to simulate price differences
 const STORE_VARIANCE = {
@@ -275,6 +540,7 @@ function getDemoProducts(query, storeId) {
     if (normKey === 'default') continue;
     if (key.includes(normKey) || normKey.includes(key)) { products = v; break; }
   }
+  const products = bestCategory ? bestCategory.products : DEMO_DEFAULT;
   const variance = STORE_VARIANCE[storeId] || 0;
   return products.map(p => ({
     ...p,
@@ -806,12 +1072,16 @@ async function scrapeStore(store, query) {
 async function runScrape(query) {
   if (DEMO_MODE) return runDemoScrape(query);
 
-  const storeResults = [];
-  for (let i = 0; i < STORES.length; i += 2) {
-    const batch = STORES.slice(i, i + 2);
-    const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
-    storeResults.push(...batchResults);
+  const storeResults = await Promise.all(STORES.map(store => scrapeStore(store, query)));
+
+  const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
+
+  // If no products found from any store (likely bot-blocked), fall back to demo
+  if (totalProducts === 0) {
+    console.log(`[scrape] No products found for "${query}" — falling back to demo data`);
+    return runDemoScrape(query);
   }
+
   return {
     query,
     timestamp: new Date().toISOString(),
@@ -826,6 +1096,28 @@ async function runScrape(query) {
     })),
   };
 }
+
+/* ─── Price alert checker (called after each search) ───────────── */
+function checkPriceAlerts(nKey, stores) {
+  const prices = [];
+  (stores || []).forEach(s => {
+    (s.products || []).forEach(p => { if (p.price > 0) prices.push(p.price); });
+  });
+  if (!prices.length) return;
+  const lowestPrice = Math.min(...prices);
+
+  for (const [key, alert] of priceAlerts) {
+    if (alert.query === nKey && lowestPrice <= alert.targetPrice) {
+      console.log(`[alert] FIRED for ${alert.email} — "${nKey}" lowest price ${lowestPrice} <= target ${alert.targetPrice} (email sending is future work)`);
+    }
+  }
+}
+
+/* ─── GET /api/ping — uptime probe ─────────────────────────────── */
+app.get('/api/ping', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.send('pong');
+});
 
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
 app.get('/api/search', rateLimit, async (req, res) => {
@@ -891,6 +1183,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     res.flush?.();
   };
 
+  let usedDemoFallback = false;
   write('start', { query, stores: STORES.length, demo: DEMO_MODE });
 
   const allResults = [];
@@ -908,32 +1201,72 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
       allResults.push(storeData);
     }
   } else {
-    for (let i = 0; i < STORES.length; i += 2) {
-      const batch = STORES.slice(i, i + 2);
-      const results = await Promise.all(batch.map(store =>
-        scrapeStore(store, query).then(sr => {
-          const storeData = {
-            id:       sr.storeId,
-            name:     sr.storeName,
-            ar:       sr.storeAr,
-            emoji:    sr.storeEmoji,
-            color:    sr.storeColor,
-            products: sr.products,
-            error:    sr.error,
-          };
-          write('store', storeData);
-          return storeData;
-        })
-      ));
-      allResults.push(...results);
+    const results = await Promise.all(STORES.map(store =>
+      scrapeStore(store, query).then(sr => {
+        const storeData = {
+          id:       sr.storeId,
+          name:     sr.storeName,
+          ar:       sr.storeAr,
+          emoji:    sr.storeEmoji,
+          color:    sr.storeColor,
+          products: sr.products,
+          error:    sr.error,
+        };
+        write('store', storeData);
+        return storeData;
+      })
+    ));
+    allResults.push(...results);
+
+    // If all stores came back empty, replace results with demo data
+    const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
+    if (totalProducts === 0) {
+      console.log(`[stream] No products found for "${query}" — falling back to demo data`);
+      for (let i = 0; i < allResults.length; i++) {
+        allResults[i] = {
+          ...allResults[i],
+          products: getDemoProducts(query, allResults[i].id),
+          error: null,
+        };
+      }
+      usedDemoFallback = true;
     }
   }
 
-  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || undefined, stores: allResults };
+  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults, query);
   write('done', finalData);
   res.end();
+});
+
+/* ─── POST /api/search/batch — parallel multi-query search ─────── */
+app.post('/api/search/batch', express.json(), rateLimit, async (req, res) => {
+  const { queries } = req.body || {};
+  if (!Array.isArray(queries) || queries.length === 0) {
+    return res.status(400).json({ error: 'Body must include a non-empty "queries" array' });
+  }
+  if (queries.length > 5) {
+    return res.status(400).json({ error: 'Maximum 5 queries per batch request' });
+  }
+
+  const results = await Promise.all(queries.map(async (q) => {
+    const query = (q || '').trim();
+    if (!query) return { query: q, stores: [] };
+    const key = normalizeQuery(query);
+    const hit = cacheGet(key);
+    if (hit) return { query, stores: hit.data.stores };
+    try {
+      const data = await runScrape(query);
+      cacheSet(key, data);
+      recordPriceHistory(key, data.stores);
+      return { query, stores: data.stores };
+    } catch (err) {
+      return { query, stores: [], error: err.message };
+    }
+  }));
+
+  res.json({ results });
 });
 
 /* ─── In-memory log ring buffer ────────────────────────────────── */
@@ -1003,6 +1336,46 @@ app.get('/api/basket', rateLimit, async (req, res) => {
   res.json({ queries, stores, timestamp: new Date().toISOString() });
 });
 
+/* ─── POST /api/alerts — create a price alert ──────────────────── */
+app.post('/api/alerts', express.json(), (req, res) => {
+  const { email, query, targetPrice } = req.body || {};
+
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ error: 'Invalid or missing email' });
+  }
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return res.status(400).json({ error: 'Invalid or missing query' });
+  }
+  const price = parseFloat(targetPrice);
+  if (isNaN(price) || price <= 0) {
+    return res.status(400).json({ error: 'targetPrice must be a number greater than 0' });
+  }
+
+  const nKey = normalizeQuery(query.trim());
+  const alertKey = `${email}:${nKey}`;
+
+  // Enforce max 5 alerts per email
+  const emailAlerts = [...priceAlerts.values()].filter(a => a.email === email);
+  if (emailAlerts.length >= 5 && !priceAlerts.has(alertKey)) {
+    return res.status(400).json({ error: 'Maximum 5 alerts per email address' });
+  }
+
+  const alert = { email, query: nKey, targetPrice: price, createdAt: new Date().toISOString() };
+  priceAlerts.set(alertKey, alert);
+
+  res.status(201).json({ success: true, alertId: alertKey, alert });
+});
+
+/* ─── GET /api/alerts — list alerts for an email ───────────────── */
+app.get('/api/alerts', (req, res) => {
+  const email = (req.query.email || '').trim();
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Invalid or missing email query parameter' });
+  }
+  const alerts = [...priceAlerts.values()].filter(a => a.email === email);
+  res.json({ email, alerts });
+});
+
 /* ─── GET /api/trending — top searched queries ─────────────────── */
 app.get('/api/trending', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '10', 10), 20);
@@ -1015,6 +1388,15 @@ app.get('/api/trending', (req, res) => {
       lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
     }));
   res.json({ trending, total: analytics.totalSearches });
+});
+
+/* ─── GET /api/history — price history for a query ────────────── */
+app.get('/api/history', (req, res) => {
+  const query = (req.query.q || '').trim();
+  if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  const nKey = normalizeQuery(query);
+  const observations = priceHistory.get(nKey) || [];
+  res.json({ query, normalizedQuery: nKey, observations: observations.slice(-10) });
 });
 
 /* ─── GET /api/stats — business analytics ──────────────────────── */
@@ -1036,6 +1418,8 @@ app.get('/api/stats', (req, res) => {
       avgProducts: r.success > 0 ? (r.totalProducts / r.success).toFixed(1) : '0',
     };
   }
+
+  const errorLogs = recentLogs.filter(e => e.level === 'error');
 
   res.json({
     uptime:        Math.floor(process.uptime()),
@@ -1059,6 +1443,28 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
+/* ─── POST /api/admin/clear-cache — clears the search result cache ─ */
+// TODO: add admin auth token check
+app.post('/api/admin/clear-cache', (req, res) => {
+  const cleared = searchCache.size;
+  searchCache.clear();
+  res.json({ cleared, timestamp: new Date().toISOString() });
+});
+
+/* ─── POST /api/admin/reset-analytics — resets analytics counters ── */
+// TODO: add admin auth token check
+app.post('/api/admin/reset-analytics', (req, res) => {
+  analytics.totalSearches = 0;
+  analytics.cacheHits     = 0;
+  analytics.cacheMisses   = 0;
+  analytics.queryCount.clear();
+  analytics.queryLastSeen.clear();
+  analytics.storeResults.clear();
+  analytics.responseTimes.length = 0;
+  analytics.startedAt     = Date.now();
+  res.json({ reset: true, timestamp: new Date().toISOString() });
+});
+
 /* ─── Health check ─────────────────────────────────────────────── */
 app.get('/api/health', (_, res) => res.json({
   status: 'ok',
@@ -1066,6 +1472,7 @@ app.get('/api/health', (_, res) => res.json({
   memory: process.memoryUsage(),
   browser: DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
   demo: DEMO_MODE,
+  demoReason: DEMO_REASON,
   stores: STORES.map(s => s.id),
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),
@@ -1083,12 +1490,59 @@ app.use('/api', (req, res) => {
 });
 
 /* ─── Start ────────────────────────────────────────────────────── */
-app.listen(PORT, async () => {
-  console.log(`\n🛒  GroceryCompare SA  →  http://localhost:${PORT}`);
-  console.log(`     Proxy: ${PROXY_URL ? `✅ ${PROXY_URL}` : '❌ none (add PROXY_URL env var for Saudi exit node)'}\n`);
+const httpServer = app.listen(PORT, async () => {
+  const modeLabel = DEMO_MODE ? `DEMO (${DEMO_REASON || 'no proxy'})` : 'LIVE (proxy set)';
+  console.log(`\n╔══════════════════════════════════════════════╗`);
+  console.log(`║  GroceryCompare SA  — http://localhost:${PORT}${' '.repeat(Math.max(0, 4 - String(PORT).length))}  ║`);
+  console.log(`║  Mode: ${modeLabel}${' '.repeat(Math.max(0, 38 - modeLabel.length))}║`);
+  console.log(`║  Stores: 8  |  Demo catalog: 14 categories  ║`);
+  console.log(`╚══════════════════════════════════════════════╝\n`);
+
+  // Cache warming: pre-populate the top 5 most searched terms after a short delay
+  const WARM_TERMS = ['حليب', 'أرز', 'دجاج', 'بيض', 'خبز'];
+  setTimeout(async () => {
+    console.log('[cache-warm] Starting cache warm-up for top terms…');
+    for (const term of WARM_TERMS) {
+      try {
+        const key = normalizeQuery(term);
+        if (!cacheGet(key)) {
+          const data = await runScrape(term);
+          cacheSet(key, data);
+          console.log(`[cache-warm] Warmed: "${term}"`);
+        }
+      } catch (e) {
+        console.error(`[cache-warm] Failed for "${term}":`, e.message);
+      }
+    }
+    console.log('[cache-warm] Cache warm-up complete');
+  }, 2000);
 });
 
-process.on('SIGINT', async () => {
-  if (browserInstance) await browserInstance.close();
+/* ─── Graceful shutdown ─────────────────────────────────────────── */
+async function shutdown(signal) {
+  console.log(`\n[${signal}] Graceful shutdown initiated…`);
+
+  // Force-exit if shutdown takes longer than 10 s
+  const forceExit = setTimeout(() => {
+    console.error('Shutdown timed out — forcing exit');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+
+  // 1. Stop accepting new HTTP requests
+  httpServer.close(() => console.log('HTTP server closed'));
+
+  // 2. Close the browser
+  try {
+    if (browserInstance) await browserInstance.close();
+    console.log('Browser closed');
+  } catch (err) {
+    console.error('Error closing browser:', err.message);
+  }
+
+  clearTimeout(forceExit);
   process.exit(0);
-});
+}
+
+process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

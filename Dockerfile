@@ -4,8 +4,11 @@ FROM node:22-slim
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     wget \
+    curl \
     --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -23,6 +26,6 @@ EXPOSE 3000
 
 # Health check — waits 60s for browser to warm up, then checks every 30s
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health | grep -q '"status":"ok"' || exit 1
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
 CMD ["node", "server.js"]
