@@ -364,32 +364,38 @@ async function extractProducts(page, storeName) {
     /* 2. Common CSS selector patterns used by major e-commerce platforms */
     const SELECTORS = {
       containers: [
-        // Generic
+        // Generic data attributes
         '[data-testid*="product"]',
         '[data-qa*="product"]',
         '[data-component*="product"]',
+        '[data-product-id]',
+        '[data-item-id]',
         // Salla platform (Panda, others)
-        '.salla-product-card',
         'salla-product-card',
-        // Noon
+        '.salla-product-card',
+        // Noon (React, dynamic class names)
         '[class*="productContainer"]',
+        '[class*="productCard"]',
+        '[class*="ProductCard"]',
         '[class*="product-container"]',
         '[class*="productBox"]',
-        // Magento (LuLu, Othaim)
-        '.product-item',
-        '.product-card',
-        'li.product',
-        '.item.product',
         // SAP Spartacus (Carrefour)
         'cx-product-grid-item',
         'cx-product-list-item',
-        // Shopify
+        // Magento 2 (LuLu, Othaim, Danube)
+        '.product-item-info',
         '.product-item',
+        'li.product',
+        '.item.product',
+        // Shopify (Tamimi)
         '[class*="ProductItem"]',
+        '[class*="product-item"]',
+        '.grid__item',
         // Danube / Bin Dawood
-        '.product',
-        '[class*="product_card"]',
         '[class*="ProductCard"]',
+        '[class*="product_card"]',
+        '.product-card',
+        '.product',
       ],
       names: [
         '[data-qa*="name"]', '[data-testid*="name"]',
@@ -416,7 +422,7 @@ async function extractProducts(page, storeName) {
     // Try each container selector
     for (const sel of SELECTORS.containers) {
       const containers = [...document.querySelectorAll(sel)];
-      if (containers.length < 2) continue;
+      if (containers.length < 1) continue;
 
       for (const container of containers.slice(0, 10)) {
         let name  = '';
@@ -434,15 +440,19 @@ async function extractProducts(page, storeName) {
         for (const ps of SELECTORS.prices) {
           const el = container.querySelector(ps);
           if (el) {
-            const txt = el.textContent.replace(/[^\d.٫٬]/g, '').replace('٫', '.').replace('٬', '');
-            const n = parseFloat(txt);
+            const raw = el.textContent
+              .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))  // Arabic-Indic → ASCII
+              .replace(/[^\d.٫٬,]/g, '')
+              .replace(/٫/g, '.').replace(/٬/g, '').replace(/,/g, '');
+            const n = parseFloat(raw);
             if (n > 0) { price = n; break; }
           }
         }
 
         // Fallback: regex search for SAR price pattern in container text
         if (!price) {
-          const txt = container.textContent;
+          const txt = container.textContent
+            .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
           const m = txt.match(/(?:SAR|ر\.س|SR)\s*([\d,]+\.?\d*)/i)
                  || txt.match(/([\d,]+\.?\d*)\s*(?:SAR|ر\.س|SR)/i)
                  || txt.match(/(\d+\.\d{2})/);
@@ -484,6 +494,117 @@ async function extractProducts(page, storeName) {
   }, storeName);
 }
 
+/* ─── Per-store API JSON extractors (network interception) ─────── */
+function parseArabicPrice(str) {
+  return parseFloat(
+    String(str)
+      .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+      .replace(/[^\d.]/g, '')
+  ) || 0;
+}
+
+function extractFromApiJson(json, storeId) {
+  try {
+    // ── Noon ──────────────────────────────────────────────────
+    if (storeId === 'noon') {
+      const hits = json.hits || json.data?.hits || json.results?.hits || [];
+      if (hits.length) return hits.slice(0, 10).map(h => ({
+        name:  h.name  || h.title || '',
+        price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
+        image: h.image_keys?.[0]
+          ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg`
+          : (h.image || ''),
+        url: h.url ? `https://www.noon.com${h.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Carrefour (SAP Spartacus OCC) ────────────────────────
+    if (storeId === 'carrefour') {
+      const products = json.products || json.data?.products || [];
+      if (products.length) return products.slice(0, 10).map(p => ({
+        name:  p.name || '',
+        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+        image: p.images?.[0]?.url || p.image?.url || '',
+        url:   p.url ? `https://www.carrefourksa.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Tamimi (Shopify) ─────────────────────────────────────
+    if (storeId === 'tamimi') {
+      const products = json.resources?.results?.products
+                    || json.products
+                    || json.items || [];
+      if (products.length) return products.slice(0, 10).map(p => ({
+        name:  p.title || p.name || '',
+        // Shopify: price is in cents as string e.g. "895" = 8.95
+        price: parseArabicPrice(p.price) > 100
+               ? parseArabicPrice(p.price) / 100
+               : parseArabicPrice(p.price),
+        image: p.image || p.featured_image || '',
+        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Panda (Salla) ────────────────────────────────────────
+    if (storeId === 'panda') {
+      const products = json.data || json.products || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name?.ar || p.name?.en || p.name || p.title || '',
+          price: parseArabicPrice(p.price?.amount ?? p.price ?? 0),
+          image: p.thumbnail || p.image?.url || '',
+          url:   p.url || p.slug || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Danube ───────────────────────────────────────────────
+    if (storeId === 'danube') {
+      const products = json.products || json.data?.products || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.final_price ?? p.price ?? 0),
+          image: p.image || p.thumbnail || '',
+          url:   p.url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Generic: walk JSON tree for product arrays ───────────
+    const candidates = [];
+    function walkJson(node, depth = 0) {
+      if (depth > 5 || candidates.length >= 10) return;
+      if (Array.isArray(node) && node.length >= 1) {
+        const first = node[0];
+        if (first && typeof first === 'object') {
+          const hasName  = 'name' in first || 'title' in first;
+          const hasPrice = 'price' in first || 'sale_price' in first || 'amount' in first;
+          if (hasName && hasPrice) {
+            node.slice(0, 10).forEach(p => {
+              const name  = p.name || p.title || '';
+              const price = parseArabicPrice(
+                p.sale_price ?? p.price?.amount ?? p.price?.value ?? p.price ?? 0
+              );
+              if (name && price > 0) candidates.push({ name, price, image: p.image || '', url: p.url || '' });
+            });
+            return;
+          }
+        }
+      }
+      if (node && typeof node === 'object' && !Array.isArray(node)) {
+        for (const val of Object.values(node)) {
+          if (val && typeof val === 'object') walkJson(val, depth + 1);
+        }
+      }
+    }
+    walkJson(json);
+    return candidates;
+  } catch (_) {
+    return [];
+  }
+}
+
 /* ─── Individual store scrapers ────────────────────────────────── */
 
 const STORES = [
@@ -494,7 +615,7 @@ const STORES = [
     emoji: '⚫',
     color: '#f9c74f',
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
-    waitFor: '[data-qa="product-name"], [class*="productContainer"], .sc-bdVTJa',
+    waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
   },
   {
     id:   'carrefour',
@@ -539,7 +660,7 @@ const STORES = [
     emoji: '🏪',
     color: '#457b9d',
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .grid__item, .product-item',
+    waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
   },
   {
     id:   'othaim',
@@ -566,28 +687,56 @@ async function scrapeStore(store, query) {
                    storeEmoji: store.emoji, storeColor: store.color,
                    products: [], error: null };
   let page = null;
+  const capturedApiProducts = [];
+
   try {
     const browser = await getBrowser();
     page = await newPage(browser);
-    await page.goto(store.url(query), {
-      timeout: 25000,
-      waitUntil: 'domcontentloaded',
+
+    // ── Intercept JSON API responses before DOM scraping ──────
+    const SKIP_API = /\.(css|js|woff|png|jpg|svg|ico|gif|mp4)(\?|$)/i;
+    const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics/i;
+
+    page.on('response', async (response) => {
+      try {
+        const url = response.url();
+        if (SKIP_API.test(url) || SKIP_HOST.test(url)) return;
+        const ct = response.headers()['content-type'] || '';
+        if (!ct.includes('json')) return;
+        const json = await response.json();
+        const products = extractFromApiJson(json, store.id);
+        if (products.length > 0) {
+          capturedApiProducts.push(...products);
+          console.log(`[${store.id}] API captured ${products.length} products from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+        }
+      } catch (_) {}
     });
 
-    // Wait for either products or a short timeout
-    try {
-      await page.waitForSelector(store.waitFor, { timeout: 8000 });
-    } catch (_) {
-      // Selector may not match exactly — still try to extract
+    // Use 'load' so JS-rendered content is available; fall back on timeout
+    await page.goto(store.url(query), {
+      timeout: 28000,
+      waitUntil: 'load',
+    }).catch(() => {}); // page timeout is non-fatal — we may have API data
+
+    // If API already gave us enough, skip DOM wait
+    if (capturedApiProducts.length < 2) {
+      try {
+        await page.waitForSelector(store.waitFor, { timeout: 7000 });
+      } catch (_) {}
+      await page.waitForTimeout(1500);
     }
 
-    // Extra wait for JS-heavy pages
-    await page.waitForTimeout(2000);
+    // Prefer API-captured data; fall back to DOM extraction
+    if (capturedApiProducts.length >= 1) {
+      result.products = capturedApiProducts
+        .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i) // dedup
+        .slice(0, 8);
+    } else {
+      result.products = await extractProducts(page, store.name);
+    }
 
-    result.products = await extractProducts(page, store.name);
   } catch (err) {
     result.error = err.message.split('\n')[0];
-    // If browser crashed, clear the instance so it gets recreated next time
     if (browserInstance && !browserInstance.isConnected()) {
       browserInstance = null;
     }
