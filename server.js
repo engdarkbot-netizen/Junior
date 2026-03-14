@@ -208,7 +208,13 @@ app.use((req, res, next) => {
  *     so scraping from Railway/Render US datacenter always returns 0)
  * ────────────────────────────────────────────────────────────── */
 let DEMO_MODE = false;
-let DEMO_REASON = null; // 'no_proxy' | 'browser_unavailable' | null
+let DEMO_REASON = null; // 'no_proxy' | 'browser_unavailable' | 'forced' | null
+
+if (process.env.FORCE_DEMO === '1' || process.env.FORCE_DEMO === 'true') {
+  DEMO_MODE = true;
+  DEMO_REASON = 'forced';
+  console.log('⚠️  FORCE_DEMO=1 — running in DEMO MODE');
+}
 
 if (!PROXY_URL) {
   DEMO_MODE = true;
@@ -1331,8 +1337,12 @@ app.use('/api/', (req, res, next) => {
 
 /* ─── Start ────────────────────────────────────────────────────── */
 const httpServer = app.listen(PORT, async () => {
-  console.log(`\n🛒  GroceryCompare SA  →  http://localhost:${PORT}`);
-  console.log(`     Proxy: ${PROXY_URL ? `✅ ${PROXY_URL}` : '❌ none (add PROXY_URL env var for Saudi exit node)'}\n`);
+  const modeLabel = DEMO_MODE ? `DEMO (${DEMO_REASON || 'no proxy'})` : 'LIVE (proxy set)';
+  console.log(`\n╔══════════════════════════════════════════════╗`);
+  console.log(`║  GroceryCompare SA  — http://localhost:${PORT}${' '.repeat(Math.max(0, 4 - String(PORT).length))}  ║`);
+  console.log(`║  Mode: ${modeLabel}${' '.repeat(Math.max(0, 38 - modeLabel.length))}║`);
+  console.log(`║  Stores: 8  |  Demo catalog: 14 categories  ║`);
+  console.log(`╚══════════════════════════════════════════════╝\n`);
 });
 
 /* ─── Graceful shutdown ─────────────────────────────────────────── */
