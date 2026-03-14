@@ -37,6 +37,21 @@
       "short_name": "أرز",
       "description": "Compare rice prices across Saudi stores",
       "url": "/?q=%D8%A3%D8%B1%D8%B2"
+    },
+    {
+      "name": "Search بيض",
+      "short_name": "بيض",
+      "description": "Compare egg prices across Saudi stores",
+      "url": "/?q=%D8%A8%D9%8A%D8%B6"
+    },
+    {
+      "name": "Search chicken",
+      "short_name": "Chicken",
+      "description": "Compare chicken prices across Saudi stores",
+      "url": "/?q=chicken"
     }
-  ]
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "prefer_related_applications": false
 }
