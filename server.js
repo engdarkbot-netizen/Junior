@@ -60,6 +60,8 @@ const PROXY_USER = process.env.PROXY_USER || null;
 const PROXY_PASS = process.env.PROXY_PASS || null;
 
 app.use(cors());
+// Serve grocery.html as the homepage (before static so it takes priority over index.html)
+app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));
 app.use(express.static(path.join(__dirname)));
 
 /* ─── In-memory search cache (5-minute TTL, max 150 entries) ───── */
@@ -732,9 +734,6 @@ app.get('/api/logs', (req, res) => {
   const n = Math.min(parseInt(req.query.n || '50', 10), MAX_LOGS);
   res.json({ logs: recentLogs.slice(-n) });
 });
-
-/* ─── Serve frontend ───────────────────────────────────────────── */
-app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));
 
 /* ─── Start ────────────────────────────────────────────────────── */
 app.listen(PORT, async () => {
