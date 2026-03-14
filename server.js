@@ -347,11 +347,15 @@ async function newPage(browser) {
 
   const ctx = await browser.newContext(contextOptions);
 
+  // Block fonts, media — keep HTML/JS/XHR for SPA rendering
+  await ctx.route(/\.(woff2?|ttf|eot|otf|mp4|mp3|webm|gif)(\?.*)?$/, r => r.abort());
+
   // Mask Playwright fingerprint
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
     Object.defineProperty(navigator, 'language',  { get: () => 'ar-SA' });
     Object.defineProperty(navigator, 'languages', { get: () => ['ar-SA', 'ar', 'en-US'] });
+    window.chrome = { runtime: {} };
   });
 
   return ctx.newPage();
@@ -394,12 +398,18 @@ async function extractProducts(page, storeName) {
     /* 2. Common CSS selector patterns used by major e-commerce platforms */
     const SELECTORS = {
       containers: [
+        // Noon — explicit data-qa
+        '[data-qa="product-container"]',
+        '[data-qa="product"]',
         // Generic data attributes
         '[data-testid*="product"]',
         '[data-qa*="product"]',
         '[data-component*="product"]',
         '[data-product-id]',
         '[data-item-id]',
+        // SAP Spartacus (Carrefour)
+        'cx-product-grid-item',
+        'cx-product-list-item',
         // Salla platform (Panda, others)
         'salla-product-card',
         '.salla-product-card',
@@ -409,7 +419,7 @@ async function extractProducts(page, storeName) {
         '[class*="ProductCard"]',
         '[class*="product-container"]',
         '[class*="productBox"]',
-        // SAP Spartacus (Carrefour)
+        // SAP Spartacus (Carrefour) — kept for fallback
         'cx-product-grid-item',
         'cx-product-list-item',
         // Magento 2 (LuLu, Othaim, Danube)
@@ -428,24 +438,33 @@ async function extractProducts(page, storeName) {
         '.product',
       ],
       names: [
+        // Noon
+        '[data-qa="product-name"]',
+        // Carrefour Spartacus
+        '.cx-product-name', 'cx-product-name a',
+        // Generic
         '[data-qa*="name"]', '[data-testid*="name"]',
         '[class*="product-name"]', '[class*="productName"]',
         '[class*="ProductName"]', '[class*="product_name"]',
         '[class*="product-title"]', '[class*="productTitle"]',
-        '.product-title', '.product-name', 'h2.name', 'h3.name',
+        '.product-title', '.product-name', 'h2.name', 'h3.name', 'h4',
         '.item-name', '.title', 'a[title]',
         'salla-product-card [slot="title"]',
       ],
       prices: [
+        // Noon
+        '[data-qa="price"]',
+        // Carrefour Spartacus
+        '.cx-price .Value', '.cx-price',
+        // Generic
         '[data-qa*="price"]', '[data-testid*="price"]',
         '[class*="product-price"]', '[class*="productPrice"]',
         '[class*="ProductPrice"]', '[class*="product_price"]',
         '[class*="price--sale"]', '[class*="price__sale"]',
         '[class*="priceText"]', '[class*="price-text"]',
-        '.price', '.price__current', '.price-box',
+        '.price', '.price__current', '.price-box', '.special-price',
         '[class*="finalPrice"]', '[class*="final-price"]',
-        'salla-product-card [slot="price"]',
-        'salla-price',
+        'salla-price', 'salla-product-card [slot="price"]',
       ],
     };
 
@@ -653,8 +672,8 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
-    url:  q => `https://www.carrefourksa.com/mafsau/en/c/KSFDB?q=${encodeURIComponent(q)}&searchType=regular`,
-    waitFor: 'cx-product-grid-item, .product-card, .item',
+    url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
+    waitFor: 'cx-product-grid-item, cx-product-card, .product-card, [class*="product"]',
   },
   {
     id:   'panda',
@@ -707,7 +726,7 @@ const STORES = [
     ar:   'بن داود',
     emoji: '🟠',
     color: '#e76f51',
-    url:  q => `https://bindawood.com/search?q=${encodeURIComponent(q)}`,
+    url:  q => `https://www.bindawood.com/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .product-item, [class*="product"]',
   },
 ];
@@ -753,6 +772,10 @@ async function scrapeStore(store, query) {
       try {
         await page.waitForSelector(store.waitFor, { timeout: 7000 });
       } catch (_) {}
+      // Scroll mid-page to trigger lazy-loaded product grids
+      await page.evaluate(() => {
+        window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'instant' });
+      }).catch(() => {});
       await page.waitForTimeout(1500);
     }
 
@@ -764,6 +787,7 @@ async function scrapeStore(store, query) {
     } else {
       result.products = await extractProducts(page, store.name);
     }
+    console.log(`[${store.id}] "${query}" → ${result.products.length} products${capturedApiProducts.length ? ' (API)' : ' (DOM)'}`);
 
   } catch (err) {
     result.error = err.message.split('\n')[0];
