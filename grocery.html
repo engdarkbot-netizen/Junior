@@ -1502,6 +1502,14 @@ function buildDropdown(filter = '') {
       doSearch(item.dataset.q);
     });
   });
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      localStorage.removeItem(RECENT_KEY);
+      buildDropdown($('searchInput').value);
+    });
+  }
 }
 
 function openDropdown() {
