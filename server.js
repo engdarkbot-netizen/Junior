@@ -621,6 +621,53 @@ const _origError = console.error.bind(console);
 console.log   = (...a) => { _origLog(...a);   addLog('info',  ...a.map(String)); };
 console.error = (...a) => { _origError(...a); addLog('error', ...a.map(String)); };
 
+/* ─── GET /api/basket — multi-item basket comparison ───────────── */
+app.get('/api/basket', rateLimit, async (req, res) => {
+  const rawQueries = Array.isArray(req.query.q) ? req.query.q : [req.query.q];
+  const queries = rawQueries.map(q => (q || '').trim()).filter(Boolean);
+  if (!queries.length) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  if (queries.length > 10) return res.status(400).json({ error: 'Maximum 10 items per basket' });
+
+  // Scrape/cache each query
+  const itemResults = await Promise.all(queries.map(async q => {
+    const key = normalizeQuery(q);
+    const hit = cacheGet(key);
+    if (hit) return hit.data;
+    const data = await runScrape(q);
+    cacheSet(key, data);
+    return data;
+  }));
+
+  // Per-store totals
+  const storeMap = {};
+  STORES.forEach(s => {
+    storeMap[s.id] = { id: s.id, name: s.name, ar: s.ar, emoji: s.emoji, color: s.color,
+                       items: [], total: 0, missing: 0 };
+  });
+
+  itemResults.forEach(r => {
+    STORES.forEach(s => {
+      const storeResult = (r.stores || []).find(sr => sr.id === s.id);
+      if (storeResult && storeResult.products && storeResult.products.length > 0) {
+        const cheapest = storeResult.products.reduce((a, b) => a.price < b.price ? a : b);
+        storeMap[s.id].items.push({ query: r.query, product: cheapest });
+        storeMap[s.id].total += cheapest.price;
+      } else {
+        storeMap[s.id].missing++;
+      }
+    });
+  });
+
+  const stores = Object.values(storeMap)
+    .filter(s => s.total > 0 || s.missing > 0)
+    .sort((a, b) => {
+      if (a.missing !== b.missing) return a.missing - b.missing;
+      return a.total - b.total;
+    });
+
+  res.json({ queries, stores, timestamp: new Date().toISOString() });
+});
+
 /* ─── GET /api/trending — top searched queries ─────────────────── */
 app.get('/api/trending', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit || '10', 10), 20);

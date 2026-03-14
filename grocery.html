@@ -3,12 +3,36 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GroceryCompare SA — Live Saudi Grocery Price Comparison</title>
-  <meta name="description" content="Compare live grocery prices from Noon, Carrefour, Panda, LuLu, Danube, Tamimi, Othaim and Bin Dawood — instantly." />
+  <title>GroceryCompare SA — Compare Grocery Prices in Saudi Arabia</title>
+  <meta name="description" content="Compare live grocery prices from Noon, Carrefour, Panda, LuLu, Danube, Tamimi, Othaim and Bin Dawood. Find the cheapest price instantly." />
+  <meta name="keywords" content="grocery prices Saudi Arabia, compare supermarket prices KSA, cheapest groceries Riyadh, مقارنة أسعار البقالة, أرخص سوبرماركت" />
   <meta name="theme-color" content="#0f5132" />
+  <link rel="canonical" href="https://grocerycompare.sa/" />
   <link rel="manifest" href="/manifest.json" />
-  <meta property="og:title" content="GroceryCompare SA" />
-  <meta property="og:description" content="Find the best grocery prices across all major Saudi supermarkets in seconds." />
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="GroceryCompare SA — Find the Cheapest Grocery Prices" />
+  <meta property="og:description" content="Compare live prices from 8 major Saudi supermarkets. Save money on every grocery run." />
+  <meta property="og:url" content="https://grocerycompare.sa/" />
+  <meta property="og:site_name" content="GroceryCompare SA" />
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="GroceryCompare SA" />
+  <meta name="twitter:description" content="Compare live grocery prices across Saudi Arabia's top supermarkets." />
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "GroceryCompare SA",
+    "url": "https://grocerycompare.sa/",
+    "description": "Real-time grocery price comparison across Saudi Arabia's major supermarkets",
+    "applicationCategory": "ShoppingApplication",
+    "operatingSystem": "All",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "SAR" },
+    "inLanguage": ["en", "ar"]
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -817,6 +841,159 @@ footer {
   .price-table { padding: .5rem 1rem .75rem; }
   .savings-strip { margin: 0 .75rem .75rem; }
 }
+
+/* ── Hero Stats ────────────────────────────────────────────────── */
+.hero-stat {
+  display: flex; flex-direction: column; align-items: center;
+  gap: .15rem;
+}
+.hero-stat-num { font-size: 1.4rem; font-weight: 800; color: #fff; }
+.hero-stat-label { font-size: .72rem; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .05em; }
+
+/* ── Shopping Basket ───────────────────────────────────────────── */
+.basket-btn {
+  position: relative;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.25);
+  color: #fff;
+  border-radius: var(--r-md);
+  padding: .45rem .75rem;
+  font-size: .82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--fast) var(--ease);
+  display: flex; align-items: center; gap: .4rem;
+  white-space: nowrap;
+}
+.basket-btn:hover { background: rgba(255,255,255,.25); }
+.basket-count {
+  background: var(--gold);
+  color: #fff;
+  border-radius: 10px;
+  font-size: .68rem;
+  font-weight: 700;
+  padding: .1rem .35rem;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.4;
+}
+.basket-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,.5);
+  backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--med) var(--ease);
+}
+.basket-overlay.open { opacity: 1; pointer-events: all; }
+.basket-drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 400;
+  width: min(480px, 100vw);
+  background: var(--surface);
+  box-shadow: var(--shadow-xl);
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--med) var(--ease);
+  overflow: hidden;
+}
+.basket-drawer.open { transform: translateX(0); }
+.basket-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--green);
+  color: #fff;
+  flex-shrink: 0;
+}
+.basket-header h2 { font-size: 1rem; font-weight: 700; }
+.basket-close {
+  background: rgba(255,255,255,.15); border: none; color: #fff;
+  border-radius: 50%; width: 32px; height: 32px;
+  font-size: 1rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--fast);
+}
+.basket-close:hover { background: rgba(255,255,255,.3); }
+.basket-body { flex: 1; overflow-y: auto; padding: 1rem 1.5rem; }
+.basket-empty {
+  text-align: center; padding: 3rem 1rem;
+  color: var(--text-muted); font-size: .9rem;
+}
+.basket-empty-icon { font-size: 3rem; display: block; margin-bottom: .75rem; }
+.basket-item {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.basket-item:last-child { border-bottom: none; }
+.basket-item-name { flex: 1; font-size: .88rem; font-weight: 500; color: var(--text); }
+.basket-item-price { font-size: .88rem; font-weight: 700; color: var(--green-mid); white-space: nowrap; }
+.basket-item-store { font-size: .72rem; color: var(--text-muted); margin-top: .1rem; }
+.basket-item-remove {
+  background: none; border: none; color: var(--text-faint);
+  cursor: pointer; font-size: 1.1rem; padding: .2rem; line-height: 1;
+  border-radius: 4px; transition: color var(--fast);
+}
+.basket-item-remove:hover { color: var(--red); }
+.basket-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+.basket-compare-btn {
+  width: 100%; padding: .8rem;
+  background: var(--green-mid); color: #fff; border: none;
+  border-radius: var(--r-md); font-size: .92rem; font-weight: 700;
+  cursor: pointer; transition: background var(--fast);
+}
+.basket-compare-btn:hover { background: var(--green); }
+.basket-compare-btn:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+.basket-results {
+  margin-top: 1rem;
+  display: flex; flex-direction: column; gap: .5rem;
+}
+.basket-store-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .6rem .75rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  transition: all var(--fast);
+}
+.basket-store-row.cheapest {
+  border-color: var(--green-mid);
+  background: var(--green-pale);
+}
+.basket-store-row.cheapest .bsr-total { color: var(--green-mid); }
+.bsr-emoji { font-size: 1.1rem; flex-shrink: 0; }
+.bsr-name { flex: 1; font-size: .85rem; font-weight: 600; }
+.bsr-total { font-size: .92rem; font-weight: 700; white-space: nowrap; }
+.bsr-missing { font-size: .72rem; color: var(--text-muted); white-space: nowrap; }
+.bsr-best-tag {
+  background: var(--green-mid); color: #fff;
+  font-size: .65rem; font-weight: 700;
+  padding: .15rem .4rem; border-radius: 8px;
+}
+.basket-loading { text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: .85rem; }
+
+/* Add-to-basket button on product card */
+.add-basket-btn {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .3rem .65rem;
+  background: var(--green-pale);
+  color: var(--green);
+  border: 1px solid rgba(37,162,68,.25);
+  border-radius: var(--r-sm);
+  font-size: .75rem; font-weight: 600;
+  cursor: pointer; transition: all var(--fast) var(--ease);
+  white-space: nowrap;
+}
+.add-basket-btn:hover { background: var(--green-mid); color: #fff; border-color: var(--green-mid); }
+.add-basket-btn.added { background: var(--gold-pale); color: var(--gold); border-color: rgba(217,119,6,.3); }
+
+/* Price trend badge */
+.price-trend {
+  font-size: .68rem; font-weight: 700;
+  padding: .1rem .35rem; border-radius: 8px;
+  display: inline-block; margin-left: .3rem;
+}
+.price-trend.up { background: var(--red-pale); color: var(--red); }
+.price-trend.down { background: var(--green-pale); color: var(--green-mid); }
   </style>
 </head>
 <body>
@@ -843,8 +1020,35 @@ footer {
     </div>
 
     <div class="header-actions">
+      <button class="basket-btn" id="basketBtn" title="Shopping basket">
+        🛍️ Basket
+        <span class="basket-count" id="basketCount" style="display:none">0</span>
+      </button>
       <button class="icon-btn" id="themeBtn" title="Toggle dark mode">🌙</button>
     </div>
+  </div>
+</div>
+
+<!-- ── Basket Overlay & Drawer ───────────────────────────────────── -->
+<div class="basket-overlay" id="basketOverlay"></div>
+<div class="basket-drawer" id="basketDrawer">
+  <div class="basket-header">
+    <h2>🛍️ My Shopping Basket</h2>
+    <button class="basket-close" id="basketClose">✕</button>
+  </div>
+  <div class="basket-body" id="basketBody">
+    <div class="basket-empty" id="basketEmpty">
+      <span class="basket-empty-icon">🛒</span>
+      <p>Your basket is empty.</p>
+      <p style="margin-top:.5rem;font-size:.82rem">Search for a product and click <strong>+ Add to Basket</strong> on the cheapest result.</p>
+    </div>
+    <div id="basketItemsList" style="display:none"></div>
+    <div class="basket-results" id="basketResults"></div>
+  </div>
+  <div class="basket-footer" id="basketFooter" style="display:none">
+    <button class="basket-compare-btn" id="basketCompareBtn">
+      🔍 Compare Total Across All Stores
+    </button>
   </div>
 </div>
 
@@ -863,6 +1067,7 @@ footer {
     <div class="popular-searches" id="popularSearches">
       <span>Try:</span>
     </div>
+    <div id="heroStats" style="display:none;margin-top:1.5rem;display:flex;gap:2rem;justify-content:center;flex-wrap:wrap"></div>
   </section>
 
   <!-- Loading -->
@@ -904,6 +1109,9 @@ footer {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.75"/></svg>
         Refresh
       </button>
+      <button class="action-btn" id="addAllBtn" title="Add cheapest of each product to basket" style="display:none">
+        🛍️ Add All
+      </button>
       <button class="action-btn" id="shareBtn">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Share
@@ -928,15 +1136,29 @@ footer {
 
 <footer>
   <div class="footer-inner">
-    <div class="footer-logo">🛒 GroceryCompare SA</div>
-    <p class="footer-sub">
-      Prices are scraped live from each store's website.<br>
-      Always verify the final price at checkout. &nbsp;🇸🇦
-    </p>
-    <div class="footer-links">
-      <a href="#" onclick="return false">About</a>
-      <a href="#" onclick="return false">How it works</a>
-      <a href="#" onclick="return false">Privacy</a>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2rem;text-align:left;margin-bottom:2rem;padding-bottom:2rem;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="footer-logo" style="margin-bottom:.5rem">🛒 GroceryCompare SA</div>
+        <p class="footer-sub" style="text-align:left">The smartest way to shop for groceries in Saudi Arabia. Compare 8 stores in seconds.</p>
+      </div>
+      <div>
+        <div style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">How It Works</div>
+        <p class="footer-sub" style="text-align:left">1. Search any product in Arabic or English<br>2. We fetch live prices from all 8 stores<br>3. See the cheapest price instantly<br>4. Add items to your basket and compare totals</p>
+      </div>
+      <div>
+        <div style="font-size:.8rem;font-weight:700;color:var(--text);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">Stores Covered</div>
+        <p class="footer-sub" style="text-align:left">Noon Daily · Carrefour · Panda<br>LuLu Hypermarket · Danube<br>Tamimi Markets · Othaim · Bin Dawood</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+      <p class="footer-sub">
+        Prices are scraped live — always verify at checkout. &nbsp;🇸🇦
+      </p>
+      <div class="footer-links">
+        <a href="#" onclick="return false">Privacy</a>
+        <a href="#" onclick="return false">Terms</a>
+        <a href="#" onclick="return false">Contact</a>
+      </div>
     </div>
   </div>
 </footer>
@@ -1138,6 +1360,25 @@ function renderPopularChips(items, labelText) {
   renderPopularChips(POPULAR.slice(0, 8), 'Try:');
 })();
 
+// Populate hero stats from /api/stats
+(async () => {
+  try {
+    const r = await fetch('/api/stats', { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return;
+    const stats = await r.json();
+    const statsEl = $('heroStats');
+    if (!stats.totalSearches) return;
+    statsEl.style.display = 'flex';
+    const hitRate = stats.cacheHitRate || '0%';
+    statsEl.innerHTML = [
+      { num: stats.totalSearches.toLocaleString(), label: 'Searches Made' },
+      { num: stats.uniqueQueries.toLocaleString(), label: 'Products Tracked' },
+      { num: '8', label: 'Stores Live' },
+      { num: hitRate, label: 'Cache Hit Rate' },
+    ].map(s => `<div class="hero-stat"><div class="hero-stat-num">${s.num}</div><div class="hero-stat-label">${s.label}</div></div>`).join('');
+  } catch (_) {}
+})();
+
 /* ════════════════════════════════════════════════════════════════
    SEARCH
 ════════════════════════════════════════════════════════════════ */
@@ -1195,28 +1436,75 @@ async function doSearch(rawQuery) {
     } else { clearInterval(pillTimer); }
   }, 800);
 
+  // Try SSE streaming first for live per-store updates
+  const t0 = performance.now();
+  let streamFailed = false;
   try {
-    const t0  = performance.now();
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-    clearInterval(pillTimer);
+    await new Promise((resolve, reject) => {
+      const es = new EventSource(`/api/search/stream?q=${encodeURIComponent(query)}`);
+      const partialStores = {};
+      let storesDone = 0;
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const ms   = Math.round(performance.now() - t0);
-    lastData   = data;
+      es.addEventListener('store', e => {
+        const store = JSON.parse(e.data);
+        partialStores[store.id] = store;
+        storesDone++;
+        // Update pill
+        const pill = document.getElementById(`sspill-${store.id}`);
+        if (pill) {
+          pill.classList.remove('checking');
+          pill.classList.add(store.error && !store.products?.length ? 'error' : 'done');
+        }
+        $('progressCount').textContent = `${storesDone} / ${STORES.length} stores`;
+      });
 
-    // Mark all pills done
-    document.querySelectorAll('.store-status-pill').forEach(p => {
-      p.classList.remove('checking');
-      p.classList.add('done');
+      es.addEventListener('done', e => {
+        clearInterval(pillTimer);
+        es.close();
+        const data = JSON.parse(e.data);
+        const ms = Math.round(performance.now() - t0);
+        lastData = data;
+        document.querySelectorAll('.store-status-pill').forEach(p => {
+          p.classList.remove('checking');
+          if (!p.classList.contains('done') && !p.classList.contains('error')) p.classList.add('done');
+        });
+        setTimeout(() => renderResults(data, ms), 200);
+        resolve();
+      });
+
+      es.addEventListener('error', () => {
+        es.close();
+        streamFailed = true;
+        reject(new Error('stream'));
+      });
+
+      // Timeout fallback after 45s
+      setTimeout(() => { es.close(); reject(new Error('timeout')); }, 45000);
     });
-
-    setTimeout(() => renderResults(data, ms), 300);
   } catch (err) {
     clearInterval(pillTimer);
-    $('loading').style.display = 'none';
-    show('error-box');
-    setStatus('⚠️ ' + err.message, 'error');
+    if (streamFailed || err.message === 'stream' || err.message === 'timeout') {
+      // Fallback to regular JSON endpoint
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const ms = Math.round(performance.now() - t0);
+        lastData = data;
+        document.querySelectorAll('.store-status-pill').forEach(p => {
+          p.classList.remove('checking'); p.classList.add('done');
+        });
+        setTimeout(() => renderResults(data, ms), 200);
+      } catch (e2) {
+        $('loading').style.display = 'none';
+        show('error-box');
+        setStatus('⚠️ ' + e2.message, 'error');
+      }
+    } else {
+      $('loading').style.display = 'none';
+      show('error-box');
+      setStatus('⚠️ ' + err.message, 'error');
+    }
   }
 }
 
@@ -1246,6 +1534,7 @@ function sortStoreProducts(storesWithProducts) {
 
 function renderResults(data, ms) {
   $('loading').style.display = 'none';
+  if (!data.cached) recordPrices(data);
 
   const storesWithProducts = data.stores.filter(s => s.products && s.products.length > 0);
   const totalProducts      = data.stores.reduce((n, s) => n + (s.products?.length || 0), 0);
@@ -1259,6 +1548,7 @@ function renderResults(data, ms) {
 
   // Results bar
   show('results-bar');
+  $('addAllBtn').style.display = '';
   $('resultsTitle').innerHTML = `Results for <em style="font-style:normal">"${sanitize(data.query)}"</em>`;
   let meta = `${totalProducts} products · ${storesWithProducts.length} of ${STORES.length} stores`;
   if (ms) meta += ` · ${ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's'}`;
@@ -1345,7 +1635,7 @@ function renderResults(data, ms) {
             </div>
           </div>
           <div class="price-val-wrap">
-            <div class="price-num">${sp.product.price.toFixed(2)}<span class="price-sar"> SAR</span>${isBest ? '<span class="best-tag">BEST</span>' : ''}</div>
+            <div class="price-num">${sp.product.price.toFixed(2)}<span class="price-sar"> SAR</span>${isBest ? '<span class="best-tag">BEST</span>' : ''}${(() => { const t = getPriceTrend(data.query, sp.store.id, sp.product.price); return t ? `<span class="price-trend ${t}">${t === 'up' ? '↑' : '↓'}</span>` : ''; })()}</div>
           </div>
         </div>`;
     }).join('');
@@ -1370,8 +1660,12 @@ function renderResults(data, ms) {
       ? `<div class="savings-strip">
            💰 Save <strong> ${savings} SAR</strong> vs most expensive
            ${repProduct.url ? `<a class="shop-btn" href="${sanitize(repProduct.url)}" target="_blank" rel="noopener">Shop now →</a>` : ''}
+           <button class="add-basket-btn" data-slot="${slot}" title="Add cheapest to basket">+ Basket</button>
          </div>`
-      : '';
+      : `<div class="savings-strip" style="background:var(--surface-alt)">
+           <span style="color:var(--text-muted);font-size:.8rem">Same price everywhere</span>
+           <button class="add-basket-btn" data-slot="${slot}" title="Add to basket">+ Basket</button>
+         </div>`;
 
     const card = document.createElement('div');
     card.className = 'product-card';
@@ -1394,8 +1688,37 @@ function renderResults(data, ms) {
       </div>
       ${savingsHtml}`;
 
+    // Store slot data for basket use
+    card.dataset.slotData = JSON.stringify({
+      name: repProduct.name || data.query,
+      price: minPrice,
+      store: repStore.name,
+      storeId: repStore.id,
+      url: repProduct.url || '',
+      query: data.query,
+    });
     grid.appendChild(card);
   }
+
+  // Wire up "Add to Basket" buttons
+  grid.querySelectorAll('.add-basket-btn').forEach(btn => {
+    const slot = parseInt(btn.dataset.slot);
+    const card = grid.querySelector(`.product-card:nth-child(${slot + 1})`);
+    if (!card) return;
+    const slotData = JSON.parse(card.dataset.slotData || '{}');
+    const alreadyAdded = basket.some(b => b.query === slotData.query);
+    if (alreadyAdded) { btn.textContent = '✓ Added'; btn.classList.add('added'); }
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (basket.some(b => b.query === slotData.query)) {
+        basketRemove(slotData.query);
+        btn.textContent = '+ Basket'; btn.classList.remove('added');
+      } else {
+        basketAdd(slotData);
+        btn.textContent = '✓ Added'; btn.classList.add('added');
+      }
+    });
+  });
 
   // Animate bars after DOM paint
   requestAnimationFrame(() => {
@@ -1418,6 +1741,27 @@ function renderResults(data, ms) {
 $('sortSelect').addEventListener('change', e => {
   currentSort = e.target.value;
   if (lastData) renderResults(lastData, 0);
+});
+
+$('addAllBtn').addEventListener('click', () => {
+  const cards = document.querySelectorAll('.product-card[data-slot-data]');
+  let added = 0;
+  cards.forEach(card => {
+    const sd = JSON.parse(card.dataset.slotData || '{}');
+    if (sd.query && !basket.some(b => b.query === sd.query)) {
+      basket.push(sd);
+      added++;
+    }
+  });
+  if (added > 0) {
+    saveBasket();
+    renderBasket();
+    toast(`Added ${added} item${added > 1 ? 's' : ''} to basket`);
+    // Update all basket buttons
+    document.querySelectorAll('.add-basket-btn').forEach(btn => {
+      btn.textContent = '✓ Added'; btn.classList.add('added');
+    });
+  }
 });
 
 $('refreshBtn').addEventListener('click', () => {
@@ -1447,6 +1791,192 @@ if (urlQ) {
   fetch('/api/health', { signal: AbortSignal.timeout(4000) })
     .then(r => r.ok && setStatus('✅ Connected — ready to compare prices', 'success'))
     .catch(() => setStatus('⚠️ Scraper server not running', 'error'));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PRICE HISTORY (localStorage-backed)
+════════════════════════════════════════════════════════════════ */
+const HISTORY_KEY = 'gc_price_history_v1';
+function getPriceHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '{}'); } catch { return {}; }
+}
+function savePriceHistory(h) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+}
+function recordPrices(data) {
+  const h = getPriceHistory();
+  const now = Date.now();
+  data.stores.forEach(s => {
+    if (!s.products || !s.products.length) return;
+    s.products.forEach(p => {
+      const key = `${data.query}::${s.id}`;
+      if (!h[key]) h[key] = [];
+      h[key] = [...h[key].slice(-9), { price: p.price, ts: now }];
+    });
+  });
+  savePriceHistory(h);
+}
+function getPriceTrend(query, storeId, currentPrice) {
+  const h = getPriceHistory();
+  const key = `${query}::${storeId}`;
+  const history = h[key] || [];
+  if (history.length < 2) return null;
+  const prevPrice = history[history.length - 2].price;
+  const delta = currentPrice - prevPrice;
+  if (Math.abs(delta) < 0.01) return null;
+  return delta > 0 ? 'up' : 'down';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SHOPPING BASKET
+════════════════════════════════════════════════════════════════ */
+const BASKET_KEY = 'gc_basket_v1';
+let basket = [];
+try { basket = JSON.parse(localStorage.getItem(BASKET_KEY) || '[]'); } catch { basket = []; }
+
+function saveBasket() {
+  localStorage.setItem(BASKET_KEY, JSON.stringify(basket));
+}
+function basketAdd(item) {
+  basket = basket.filter(b => b.query !== item.query);
+  basket.push(item);
+  saveBasket();
+  renderBasket();
+  toast(`Added "${item.name.slice(0, 30)}" to basket`);
+}
+function basketRemove(query) {
+  basket = basket.filter(b => b.query !== query);
+  saveBasket();
+  renderBasket();
+  $('basketResults').innerHTML = '';
+}
+function renderBasket() {
+  const count = basket.length;
+  const countEl = $('basketCount');
+  if (count > 0) {
+    countEl.style.display = '';
+    countEl.textContent = count;
+  } else {
+    countEl.style.display = 'none';
+  }
+  const emptyEl  = $('basketEmpty');
+  const listEl   = $('basketItemsList');
+  const footerEl = $('basketFooter');
+  if (count === 0) {
+    emptyEl.style.display  = '';
+    listEl.style.display   = 'none';
+    footerEl.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display  = 'none';
+  listEl.style.display   = '';
+  footerEl.style.display = '';
+  listEl.innerHTML = basket.map(item => `
+    <div class="basket-item">
+      <div style="flex:1">
+        <div class="basket-item-name">${sanitize(item.name.slice(0, 50))}</div>
+        <div class="basket-item-store">${sanitize(item.store)} · ${sanitize(item.query)}</div>
+      </div>
+      <div class="basket-item-price">${item.price.toFixed(2)} SAR</div>
+      <button class="basket-item-remove" data-query="${sanitize(item.query)}" title="Remove">×</button>
+    </div>
+  `).join('');
+  listEl.querySelectorAll('.basket-item-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      basketRemove(btn.dataset.query);
+      // Also unmark in results grid
+      document.querySelectorAll('.add-basket-btn.added').forEach(b => {
+        const card = b.closest('.product-card');
+        if (!card) return;
+        const sd = JSON.parse(card.dataset.slotData || '{}');
+        if (sd.query === btn.dataset.query) {
+          b.textContent = '+ Basket'; b.classList.remove('added');
+        }
+      });
+    });
+  });
+}
+
+// Basket drawer controls
+$('basketBtn').addEventListener('click', () => {
+  $('basketDrawer').classList.add('open');
+  $('basketOverlay').classList.add('open');
+  renderBasket();
+});
+$('basketClose').addEventListener('click', closeBasket);
+$('basketOverlay').addEventListener('click', closeBasket);
+function closeBasket() {
+  $('basketDrawer').classList.remove('open');
+  $('basketOverlay').classList.remove('open');
+}
+
+// Compare basket across stores
+$('basketCompareBtn').addEventListener('click', async () => {
+  if (!basket.length) return;
+  const btn = $('basketCompareBtn');
+  const resultsEl = $('basketResults');
+  btn.disabled = true;
+  btn.textContent = '⏳ Comparing prices…';
+  resultsEl.innerHTML = `<div class="basket-loading">Searching all stores for ${basket.length} item${basket.length > 1 ? 's' : ''}…</div>`;
+
+  try {
+    const params = basket.map(b => `q=${encodeURIComponent(b.query)}`).join('&');
+    const res = await fetch(`/api/basket?${params}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    renderBasketResults(data);
+  } catch (err) {
+    resultsEl.innerHTML = `<div style="color:var(--red);font-size:.85rem;padding:.5rem">Error: ${sanitize(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Compare Total Across All Stores';
+  }
+});
+
+function renderBasketResults(data) {
+  const resultsEl = $('basketResults');
+  if (!data.stores || !data.stores.length) {
+    resultsEl.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem">No results found.</div>';
+    return;
+  }
+  // Only stores that have all items
+  const complete = data.stores.filter(s => s.missing === 0 && s.total > 0);
+  const partial  = data.stores.filter(s => s.missing > 0 && s.total > 0);
+  const minTotal = complete.length ? Math.min(...complete.map(s => s.total)) : 0;
+
+  const rows = [...complete, ...partial].map((s, i) => {
+    const isCheapest = complete.length > 0 && s.total === minTotal && s.missing === 0;
+    return `
+      <div class="basket-store-row ${isCheapest ? 'cheapest' : ''}">
+        <span class="bsr-emoji">${s.emoji}</span>
+        <div style="flex:1">
+          <div class="bsr-name">${sanitize(s.name)}</div>
+          ${s.missing > 0 ? `<div class="bsr-missing">${s.missing} item${s.missing > 1 ? 's' : ''} not found</div>` : ''}
+        </div>
+        ${isCheapest ? '<span class="bsr-best-tag">BEST</span>' : ''}
+        <div class="bsr-total">${s.total.toFixed(2)} SAR</div>
+      </div>`;
+  });
+
+  const savings = complete.length >= 2
+    ? (Math.max(...complete.map(s => s.total)) - minTotal).toFixed(2)
+    : null;
+
+  resultsEl.innerHTML = `
+    <div style="font-size:.8rem;font-weight:600;color:var(--text-muted);margin-bottom:.5rem;text-transform:uppercase;letter-spacing:.05em">Basket Total by Store</div>
+    ${rows.join('')}
+    ${savings && parseFloat(savings) > 0 ? `<div style="margin-top:.75rem;padding:.65rem;background:var(--green-pale);border-radius:var(--r-md);font-size:.82rem;font-weight:600;color:var(--green)">💰 Save up to ${savings} SAR by choosing the best store</div>` : ''}
+  `;
+}
+
+// Initialise basket count on load
+renderBasket();
+
+// Register service worker for PWA offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 
 /* ════════════════════════════════════════════════════════════════
