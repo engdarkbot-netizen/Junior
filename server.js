@@ -89,6 +89,26 @@ function cacheSet(key, data) {
   searchCache.set(key, { data, ts: Date.now() });
 }
 
+/* ─── In-memory price history (server-side) ────────────────────
+ * Stores last 10 lowest-price observations per normalised query.
+ * Structure: Map<nKey, Array<{ lowestPrice, ts }>>
+ * ────────────────────────────────────────────────────────────── */
+const PRICE_HISTORY_MAX = 10;
+const priceHistory = new Map(); // nKey -> [{ lowestPrice, ts }, ...]
+
+function recordPriceHistory(nKey, stores) {
+  const prices = [];
+  (stores || []).forEach(s => {
+    (s.products || []).forEach(p => { if (p.price > 0) prices.push(p.price); });
+  });
+  if (!prices.length) return;
+  const lowestPrice = Math.min(...prices);
+  const observations = priceHistory.get(nKey) || [];
+  observations.push({ lowestPrice, ts: new Date().toISOString() });
+  if (observations.length > PRICE_HISTORY_MAX) observations.shift();
+  priceHistory.set(nKey, observations);
+}
+
 /* ─── In-flight request deduplication ─────────────────────────── */
 const inflight = new Map(); // key -> Promise
 
@@ -179,9 +199,11 @@ app.use((req, res, next) => {
  *     so scraping from Railway/Render US datacenter always returns 0)
  * ────────────────────────────────────────────────────────────── */
 let DEMO_MODE = false;
+let DEMO_REASON = null; // 'no_proxy' | 'browser_unavailable' | null
 
 if (!PROXY_URL) {
   DEMO_MODE = true;
+  DEMO_REASON = 'no_proxy';
   console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
 } else {
   // Only test browser when a proxy is configured and scraping may work
@@ -191,6 +213,7 @@ if (!PROXY_URL) {
       await testBrowser.close();
     } catch (_) {
       DEMO_MODE = true;
+      DEMO_REASON = 'browser_unavailable';
       console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
     }
   })();
@@ -958,6 +981,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     const data = await promise;
     cacheSet(key, data);
     trackSearch(key, Date.now() - t0, false, data.stores);
+    recordPriceHistory(key, data.stores);
     res.json(data);
   } catch (err) {
     console.error('[search error]', err.message);
@@ -1168,6 +1192,7 @@ app.get('/api/health', (_, res) => res.json({
   memory: process.memoryUsage(),
   browser: DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
   demo: DEMO_MODE,
+  demoReason: DEMO_REASON,
   stores: STORES.map(s => s.id),
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),
