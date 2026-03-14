@@ -1,11 +1,15 @@
 /**
  * GroceryCompare SA — Real-time Price Scraper Server
  *
- * Run with:  node server.js
- * Then open: http://localhost:3000
+ * Run locally:  node server.js
+ * Production:   Deploy via Docker (Railway / Render)
  *
- * Requires Playwright browsers installed:
- *   npx playwright install chromium
+ * Environment variables:
+ *   PORT          - HTTP port (default 3000)
+ *   PROXY_URL     - Residential proxy e.g. http://host:port
+ *                   (Bright Data / Oxylabs — use a Saudi exit node)
+ *   PROXY_USER    - Proxy username
+ *   PROXY_PASS    - Proxy password
  */
 
 const express = require('express');
@@ -15,6 +19,11 @@ const { chromium } = require('playwright');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+/* ─── Proxy config (optional) ──────────────────────────────────── */
+const PROXY_URL  = process.env.PROXY_URL  || null;
+const PROXY_USER = process.env.PROXY_USER || null;
+const PROXY_PASS = process.env.PROXY_PASS || null;
 
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
@@ -26,10 +35,6 @@ async function getBrowser() {
   if (!browserInstance || !browserInstance.isConnected()) {
     browserInstance = await chromium.launch({
       headless: true,
-      // In Docker (Railway/Render) the browser lives at PLAYWRIGHT_BROWSERS_PATH
-      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH
-        ? undefined   // let Playwright auto-resolve from env
-        : undefined,  // local: uses npx playwright install chromium path
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -44,21 +49,37 @@ async function getBrowser() {
 }
 
 async function newPage(browser) {
-  const ctx = await browser.newContext({
+  const contextOptions = {
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
-    locale: 'en-US',
+    locale: 'ar-SA',                     // appear as Saudi visitor
+    timezoneId: 'Asia/Riyadh',
     extraHTTPHeaders: {
-      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
     },
-  });
+  };
+
+  // Route through Saudi residential proxy when configured
+  if (PROXY_URL) {
+    contextOptions.proxy = {
+      server:   PROXY_URL,
+      username: PROXY_USER || undefined,
+      password: PROXY_PASS || undefined,
+    };
+  }
+
+  const ctx = await browser.newContext(contextOptions);
+
   // Mask Playwright fingerprint
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'language',  { get: () => 'ar-SA' });
+    Object.defineProperty(navigator, 'languages', { get: () => ['ar-SA', 'ar', 'en-US'] });
   });
+
   return ctx.newPage();
 }
 
@@ -371,8 +392,8 @@ app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));
 
 /* ─── Start ────────────────────────────────────────────────────── */
 app.listen(PORT, async () => {
-  console.log(`\n🛒 GroceryCompare SA server running at http://localhost:${PORT}`);
-  console.log(`   Open http://localhost:${PORT} in your browser\n`);
+  console.log(`\n🛒  GroceryCompare SA  →  http://localhost:${PORT}`);
+  console.log(`     Proxy: ${PROXY_URL ? `✅ ${PROXY_URL}` : '❌ none (add PROXY_URL env var for Saudi exit node)'}\n`);
 });
 
 process.on('SIGINT', async () => {
