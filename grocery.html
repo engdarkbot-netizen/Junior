@@ -6,6 +6,7 @@
   <title>GroceryCompare SA — Live Saudi Grocery Price Comparison</title>
   <meta name="description" content="Compare live grocery prices from Noon, Carrefour, Panda, LuLu, Danube, Tamimi, Othaim and Bin Dawood — instantly." />
   <meta name="theme-color" content="#0f5132" />
+  <link rel="manifest" href="/manifest.json" />
   <meta property="og:title" content="GroceryCompare SA" />
   <meta property="og:description" content="Find the best grocery prices across all major Saudi supermarkets in seconds." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1110,14 +1111,32 @@ $('storeGrid').innerHTML = STORES.map(s =>
   `<span class="store-pill" style="background:${s.color}">${s.emoji} ${sanitize(s.name)}</span>`
 ).join('');
 
-$('popularSearches').innerHTML = `<span>Try:</span>` +
-  POPULAR.slice(0, 8).map(p => `<button class="ps-chip">${sanitize(p)}</button>`).join('');
-$('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
-  btn.addEventListener('click', () => {
-    $('searchInput').value = btn.textContent;
-    doSearch(btn.textContent);
+function renderPopularChips(items, labelText) {
+  $('popularSearches').innerHTML =
+    `<span>${sanitize(labelText)}</span>` +
+    items.map(p => `<button class="ps-chip">${sanitize(p)}</button>`).join('');
+  $('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $('searchInput').value = btn.textContent;
+      window.doSearch ? window.doSearch(btn.textContent) : doSearch(btn.textContent);
+    });
   });
-});
+}
+
+// Populate chips: try live trending first, fall back to static list
+(async () => {
+  try {
+    const r = await fetch('/api/trending?limit=8', { signal: AbortSignal.timeout(2000) });
+    if (r.ok) {
+      const { trending } = await r.json();
+      if (trending && trending.length >= 3) {
+        renderPopularChips(trending.map(t => t.query), '🔥 Trending:');
+        return;
+      }
+    }
+  } catch (_) {}
+  renderPopularChips(POPULAR.slice(0, 8), 'Try:');
+})();
 
 /* ════════════════════════════════════════════════════════════════
    SEARCH
