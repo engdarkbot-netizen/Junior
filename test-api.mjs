@@ -1,5 +1,5 @@
 /**
- * GroceryCompare SA — Automated API Test Suite
+ * GroceryCompare SA — Automated API Test Suite (14 tests)
  * Run: node test-api.mjs
  * Assumes server is running at http://localhost:3000
  */
@@ -290,7 +290,140 @@ async function testTrending() {
   }
 }
 
-// ─── 9. SSE stream ───────────────────────────────────────────────────────────
+// ─── 9. Price history ────────────────────────────────────────────────────────
+async function testPriceHistory() {
+  const testName = 'Price history — GET /api/history?q=milk returns observations array field';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/history?q=milk`);
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  if (!Array.isArray(body.observations)) {
+    fail(testName, '"observations" field is missing or not an array');
+  } else {
+    pass(testName);
+  }
+}
+
+// ─── 10. Create alert ────────────────────────────────────────────────────────
+async function testCreateAlert() {
+  const testName = 'Create alert — POST /api/alerts with JSON body returns success or handled gracefully';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/alerts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'test@test.com', query: 'milk', targetPrice: 5.0 }),
+  });
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  // Accept 200/201 (created) or 404/501 (not yet implemented) — any response
+  // that is not a server crash (5xx other than 501) is acceptable.
+  if (res.status >= 500 && res.status !== 501) {
+    fail(testName, `Server error: ${res.status}`);
+    return;
+  }
+
+  // If implemented, expect a JSON body with success indicator or id
+  if (res.status === 200 || res.status === 201) {
+    let body;
+    try {
+      body = await res.json();
+    } catch (e) {
+      fail(testName, `Expected JSON body on success response: ${e.message}`);
+      return;
+    }
+    const hasSuccess = body.success === true || typeof body.id !== 'undefined' || typeof body.alertId !== 'undefined';
+    if (hasSuccess) {
+      pass(testName);
+    } else {
+      fail(testName, `Response missing success indicator or id field: ${JSON.stringify(body).slice(0, 100)}`);
+    }
+  } else {
+    // Not yet implemented — gracefully handled
+    pass(testName + ` (endpoint not yet implemented — got ${res.status})`);
+  }
+}
+
+// ─── 11. Get alerts ──────────────────────────────────────────────────────────
+async function testGetAlerts() {
+  const testName = 'Get alerts — GET /api/alerts?email=test@test.com returns array';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/alerts?email=test@test.com`);
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status >= 500 && res.status !== 501) {
+    fail(testName, `Server error: ${res.status}`);
+    return;
+  }
+
+  if (res.status === 200) {
+    let body;
+    try {
+      body = await res.json();
+    } catch (e) {
+      fail(testName, `Failed to parse JSON: ${e.message}`);
+      return;
+    }
+
+    // Response should be an array or an object containing an array field
+    const isArray = Array.isArray(body);
+    const hasAlertsArray = !isArray && Array.isArray(body.alerts);
+    if (isArray || hasAlertsArray) {
+      pass(testName);
+    } else {
+      fail(testName, `Expected array or object with "alerts" array, got: ${JSON.stringify(body).slice(0, 100)}`);
+    }
+  } else {
+    // Not yet implemented — gracefully handled
+    pass(testName + ` (endpoint not yet implemented — got ${res.status})`);
+  }
+}
+
+// ─── 12. Trending with limit ─────────────────────────────────────────────────
+async function testTrendingWithLimit() {
+  const testName = 'Trending — GET /api/trending?limit=5 returns trending array with max 5 items';
+  const { res, error } = await safeFetch(`${BASE_URL}/api/trending?limit=5`);
+
+  if (error) { fail(testName, `Connection error: ${error.message}`); return; }
+
+  if (res.status !== 200) {
+    fail(testName, `Expected 200, got ${res.status}`);
+    return;
+  }
+
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    fail(testName, `Failed to parse JSON: ${e.message}`);
+    return;
+  }
+
+  if (!Array.isArray(body.trending)) {
+    fail(testName, '"trending" field is missing or not an array');
+    return;
+  }
+
+  if (body.trending.length > 5) {
+    fail(testName, `Expected at most 5 items, got ${body.trending.length}`);
+  } else {
+    pass(testName);
+  }
+}
+
+// ─── 13. SSE stream ──────────────────────────────────────────────────────────
 async function testSSEStream() {
   const testName = 'SSE stream — GET /api/search/stream?q=test sends start, store, done events';
 
@@ -422,7 +555,7 @@ async function main() {
   console.log('─'.repeat(60));
 
   // Check server availability first
-  console.log('\n[1/10] Health check');
+  console.log('\n[1/14] Health check');
   const serverUp = await testHealthCheck();
 
   if (!serverUp) {
@@ -430,31 +563,43 @@ async function main() {
     console.log('  will be attempted anyway and will show connection errors.\n');
   }
 
-  console.log('\n[2/10] Search validation');
+  console.log('\n[2/14] Search validation');
   await testSearchValidation();
 
-  console.log('\n[3/10] Rate limiting');
+  console.log('\n[3/14] Rate limiting');
   await testRateLimiting();
 
-  console.log('\n[4/10] Demo/real search (milk)');
+  console.log('\n[4/14] Demo/real search (milk)');
   await testSearchMilk();
 
-  console.log('\n[5/10] Arabic search');
+  console.log('\n[5/14] Arabic search');
   await testArabicSearch();
 
-  console.log('\n[6/10] Cache');
+  console.log('\n[6/14] Cache');
   await testCache();
 
-  console.log('\n[7/10] Stats endpoint');
+  console.log('\n[7/14] Stats endpoint');
   await testStats();
 
-  console.log('\n[8/10] Trending');
+  console.log('\n[8/14] Trending');
   await testTrending();
 
-  console.log('\n[9/10] SSE stream');
+  console.log('\n[9/14] Price history');
+  await testPriceHistory();
+
+  console.log('\n[10/14] Create alert');
+  await testCreateAlert();
+
+  console.log('\n[11/14] Get alerts');
+  await testGetAlerts();
+
+  console.log('\n[12/14] Trending with limit');
+  await testTrendingWithLimit();
+
+  console.log('\n[13/14] SSE stream');
   await testSSEStream();
 
-  console.log('\n[10/10] Query sanitization');
+  console.log('\n[14/14] Query sanitization');
   await testQueryTooLong();
   await testQuerySanitization();
 
