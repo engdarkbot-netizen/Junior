@@ -994,6 +994,50 @@ footer {
 }
 .price-trend.up { background: var(--red-pale); color: var(--red); }
 .price-trend.down { background: var(--green-pale); color: var(--green-mid); }
+
+/* ── Demo notice banner ────────────────────────────────────────── */
+#demo-notice {
+  display: none;
+  margin-bottom: 1rem;
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: var(--r-lg);
+  padding: .75rem 1.25rem;
+  font-size: .83rem;
+  color: #92400e;
+  line-height: 1.55;
+}
+[data-theme="dark"] #demo-notice {
+  background: rgba(217,119,6,.12);
+  border-color: rgba(217,119,6,.35);
+  color: #fcd34d;
+}
+#demo-notice.visible { display: flex; align-items: flex-start; gap: .75rem; }
+#demo-notice .demo-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+#demo-notice .demo-text .demo-en { font-weight: 600; }
+#demo-notice .demo-text .demo-ar { opacity: .85; direction: rtl; margin-top: .1rem; }
+
+/* ── WhatsApp share button ─────────────────────────────────────── */
+.wa-share-btn {
+  height: 34px;
+  padding: 0 .85rem;
+  border: 1px solid #25d366;
+  border-radius: var(--r-md);
+  background: #25d366;
+  color: #fff;
+  font-family: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  gap: .35rem;
+  transition: all var(--fast);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.wa-share-btn.visible { display: inline-flex; }
+.wa-share-btn:hover { background: #1ebe5d; border-color: #1ebe5d; }
   </style>
 </head>
 <body>
@@ -1093,6 +1137,15 @@ footer {
     </p>
   </div>
 
+  <!-- Demo notice -->
+  <div id="demo-notice">
+    <span class="demo-icon">⚠️</span>
+    <div class="demo-text">
+      <div class="demo-en">Prices shown are estimates. Live scraping may be limited by store bot protection.</div>
+      <div class="demo-ar">الأسعار المعروضة تقديرية. قد يكون الاستخراج المباشر مقيداً بحماية المتاجر من البرامج الآلية.</div>
+    </div>
+  </div>
+
   <!-- Results bar -->
   <div id="results-bar">
     <div>
@@ -1116,6 +1169,10 @@ footer {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
         Share
       </button>
+      <a class="wa-share-btn" id="waShareBtn" target="_blank" rel="noopener noreferrer" title="Share cheapest price on WhatsApp">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        WhatsApp
+      </a>
     </div>
   </div>
 
@@ -1129,7 +1186,11 @@ footer {
   <div id="no-results">
     <span class="empty-icon">😕</span>
     <h3>No products found</h3>
-    <p class="empty-sub">We couldn't find "<span id="noResultsQuery"></span>" in any store.<br>Try a different term — in Arabic or English.</p>
+    <p class="empty-sub">We couldn't find "<span id="noResultsQuery"></span>" in any store.<br>Try a different search term in Arabic or English.</p>
+    <div style="margin-top:1.25rem">
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:.6rem">Popular searches you can try:</p>
+      <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem" id="noResultsChips"></div>
+    </div>
   </div>
 
 </main>
@@ -1407,6 +1468,8 @@ async function doSearch(rawQuery) {
   hide('no-results');
   hide('error-box');
   $('store-filter').classList.remove('visible');
+  $('demo-notice').classList.remove('visible');
+  const _waBtn = $('waShareBtn'); if (_waBtn) _waBtn.classList.remove('visible');
   setStatus('');
 
   // Skeleton cards
@@ -1552,7 +1615,28 @@ function renderResults(data, ms) {
   if (!storesWithProducts.length) {
     show('no-results');
     $('noResultsQuery').textContent = data.query;
+    // Populate popular search chips in no-results panel
+    const chips = $('noResultsChips');
+    if (chips) {
+      chips.innerHTML = POPULAR.slice(0, 8).map(p =>
+        `<button class="ps-chip">${sanitize(p)}</button>`
+      ).join('');
+      chips.querySelectorAll('.ps-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          $('searchInput').value = btn.textContent;
+          window.doSearch ? window.doSearch(btn.textContent) : doSearch(btn.textContent);
+        });
+      });
+    }
     return;
+  }
+
+  // Demo notice banner
+  const demoNotice = $('demo-notice');
+  if (data.demo) {
+    demoNotice.classList.add('visible');
+  } else {
+    demoNotice.classList.remove('visible');
   }
 
   // Results bar
@@ -1742,6 +1826,31 @@ function renderResults(data, ms) {
   // Errors in status bar
   if (errors.length) {
     setStatus(`⚠️ Couldn't fetch from: ${errors.map(s => s.name).join(', ')} — sites may be blocking scrapers`, 'warning');
+  }
+
+  // WhatsApp share button — share cheapest price found
+  const waBtn = $('waShareBtn');
+  if (waBtn) {
+    // Find the globally cheapest price across all stores/products
+    const cheapestPrice = allPrices.length ? globalMin : null;
+    const cheapestStore = cheapestPrice != null
+      ? (() => {
+          for (const s of sorted) {
+            const p = s.products.find(pr => pr.price === cheapestPrice);
+            if (p) return s.name;
+          }
+          return '';
+        })()
+      : '';
+    if (cheapestPrice != null) {
+      const waText = `🛒 ${data.query} — cheapest price: ${cheapestPrice.toFixed(2)} SAR` +
+        (cheapestStore ? ` at ${cheapestStore}` : '') +
+        ` | Compare all stores: ${location.origin}/?q=${encodeURIComponent(data.query)}`;
+      waBtn.href = `https://wa.me/?text=${encodeURIComponent(waText)}`;
+      waBtn.classList.add('visible');
+    } else {
+      waBtn.classList.remove('visible');
+    }
   }
 }
 
