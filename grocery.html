@@ -863,6 +863,132 @@ footer {
   pointer-events: none;
 }
 
+/* ── Language Toggle ────────────────────────────────────────────── */
+.lang-btn {
+  height: 30px;
+  padding: 0 .65rem;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.3);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .03em;
+  transition: background var(--fast);
+  flex-shrink: 0;
+}
+.lang-btn:hover { background: rgba(255,255,255,.25); }
+
+/* ── RTL overrides ──────────────────────────────────────────────── */
+html[dir="rtl"] body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+html[dir="rtl"] .header-inner { flex-direction: row-reverse; }
+html[dir="rtl"] .header-actions { margin-left: 0; margin-right: auto; }
+html[dir="rtl"] .search-btn { right: auto; left: 6px; }
+html[dir="rtl"] #searchInput { padding: 0 1rem 0 3rem; }
+html[dir="rtl"] .basket-drawer { right: auto; left: 0; transform: translateX(-100%); }
+html[dir="rtl"] .basket-drawer.open { transform: translateX(0); }
+html[dir="rtl"] .store-grid { flex-direction: row-reverse; }
+html[dir="rtl"] .popular-searches { flex-direction: row-reverse; }
+html[dir="rtl"] .results-actions { margin-left: 0; margin-right: auto; }
+html[dir="rtl"] .dropdown-item { flex-direction: row-reverse; }
+html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
+
+/* ── Stats bar (hero social proof) ─────────────────────────────── */
+.hero-stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .6rem;
+  margin-top: 1.5rem;
+}
+.stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .38rem .9rem;
+  border-radius: 20px;
+  background: var(--green-pale);
+  border: 1px solid rgba(21,128,61,.2);
+  color: var(--green-mid);
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+/* ── PWA Install Banner ─────────────────────────────────────────── */
+#pwa-banner {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 500;
+  background: var(--green);
+  color: #fff;
+  padding: .85rem 1.25rem;
+  display: none;
+  align-items: center;
+  gap: .75rem;
+  font-size: .88rem;
+  box-shadow: 0 -4px 20px rgba(0,0,0,.2);
+}
+#pwa-banner.visible { display: flex; }
+#pwa-banner-text { flex: 1; font-weight: 500; }
+.pwa-install-btn {
+  background: #fff;
+  color: var(--green);
+  border: none;
+  border-radius: var(--r-md);
+  padding: .45rem 1rem;
+  font-weight: 700;
+  font-size: .82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pwa-dismiss-btn {
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.3);
+  border-radius: var(--r-md);
+  padding: .45rem .75rem;
+  font-size: .82rem;
+  cursor: pointer;
+}
+
+/* ── Smart Split Card ───────────────────────────────────────────── */
+#smart-split-card {
+  margin-top: .9rem;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  border-radius: var(--r-md);
+  color: #fff;
+  font-size: .85rem;
+  display: none;
+}
+#smart-split-card.visible { display: block; }
+.split-title {
+  font-weight: 700;
+  font-size: .95rem;
+  margin-bottom: .6rem;
+}
+.split-store-block {
+  background: rgba(255,255,255,.15);
+  border-radius: var(--r-sm);
+  padding: .5rem .75rem;
+  margin-bottom: .45rem;
+}
+.split-store-name { font-weight: 700; margin-bottom: .2rem; }
+.split-items { font-size: .78rem; opacity: .9; }
+.split-subtotal { font-weight: 600; font-size: .82rem; margin-top: .2rem; }
+.split-total-line {
+  margin-top: .6rem;
+  padding-top: .55rem;
+  border-top: 1px solid rgba(255,255,255,.3);
+  font-weight: 700;
+}
+.split-note {
+  margin-top: .35rem;
+  font-size: .75rem;
+  opacity: .82;
+}
+
 /* ── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 680px) {
   .header-inner { gap: .75rem; }
@@ -1226,6 +1352,7 @@ footer {
         <span class="basket-count" id="basketCount" style="display:none">0</span>
       </button>
       <button class="icon-btn" id="themeBtn" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+      <button class="lang-btn" id="langBtn" title="تبديل اللغة / Toggle language">AR</button>
     </div>
   </div>
 </div>
@@ -1245,12 +1372,20 @@ footer {
     </div>
     <div id="basketItemsList" style="display:none"></div>
     <div class="basket-results" id="basketResults"></div>
+    <div id="smart-split-card"></div>
   </div>
   <div class="basket-footer" id="basketFooter" style="display:none">
     <button class="basket-compare-btn" id="basketCompareBtn">
       🔍 Compare Total Across All Stores
     </button>
   </div>
+</div>
+
+<!-- ── PWA Install Banner ─────────────────────────────────────────── -->
+<div id="pwa-banner">
+  <span id="pwa-banner-text">📲 أضف جونيور لشاشتك الرئيسية</span>
+  <button class="pwa-install-btn" id="pwaInstallBtn">تثبيت</button>
+  <button class="pwa-dismiss-btn" id="pwaDismissBtn">تجاهل</button>
 </div>
 
 <!-- ── Status bar ───────────────────────────────────────────────── -->
@@ -1261,12 +1396,18 @@ footer {
 
   <!-- Hero -->
   <section id="hero">
-    <div class="hero-badge"><span class="pulse-dot"></span> Live prices · Updated in real-time</div>
-    <h1>Compare <span class="highlight">Grocery Prices</span><br>Across Saudi Arabia</h1>
-    <p>Instantly search 8 major supermarkets — Noon, Carrefour, Panda, LuLu and more — and find the best price in seconds.</p>
+    <div class="hero-badge"><span class="pulse-dot"></span> <span class="i18n-live">Live prices · Updated in real-time</span></div>
+    <h1 id="heroHeadline">Compare <span class="highlight">Grocery Prices</span><br>Across Saudi Arabia</h1>
+    <p id="heroSubline">Instantly search 8 major supermarkets — Noon, Carrefour, Panda, LuLu and more — and find the best price in seconds.</p>
     <div class="store-grid" id="storeGrid"></div>
     <div class="popular-searches" id="popularSearches">
-      <span>Try:</span>
+      <span id="tryLabel">Try:</span>
+    </div>
+    <!-- Social proof stats bar -->
+    <div class="hero-stats-bar" id="heroStatsBar">
+      <span class="stats-pill">🏪 <span id="statStores">8 متاجر</span></span>
+      <span class="stats-pill">📦 <span id="statProducts">+500 منتج</span></span>
+      <span class="stats-pill" id="statSavingsPill" style="display:none">💰 SAR <span id="statSavingsNum">0</span> <span class="i18n-saved">وُفّرت</span></span>
     </div>
     <div id="heroStats" style="display:none;margin-top:1.5rem;display:flex;gap:2rem;justify-content:center;flex-wrap:wrap"></div>
   </section>
@@ -1552,6 +1693,107 @@ function applyTheme(t) {
 }
 $('themeBtn').addEventListener('click', () => {
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+/* ════════════════════════════════════════════════════════════════
+   LANGUAGE (AR/EN)
+════════════════════════════════════════════════════════════════ */
+const I18N = {
+  en: {
+    searchPlaceholder: 'Search any product… (milk, rice, chicken)',
+    searchBtnTitle: 'Search (Enter)',
+    basket: '🛍️ Basket',
+    heroHeadline: 'Compare <span class="highlight">Grocery Prices</span><br>Across Saudi Arabia',
+    heroSubline: 'Instantly search 8 major supermarkets — Noon, Carrefour, Panda, LuLu and more — and find the best price in seconds.',
+    live: 'Live prices · Updated in real-time',
+    try: 'Try:',
+    statStores: '8 Stores',
+    statProducts: '500+ Products',
+    saved: 'Saved',
+    bestPrice: 'Best price',
+    basketTitle: '🛍️ My Shopping Basket',
+    basketEmpty: 'Your basket is empty.',
+    trending: '🔥 Trending:',
+    compareBtn: '🔍 Compare Total Across All Stores',
+    dir: 'ltr',
+  },
+  ar: {
+    searchPlaceholder: 'ابحث عن منتج... مثال: حليب، أرز، دجاج',
+    searchBtnTitle: 'ابحث',
+    basket: '🛍️ سلة التسوق',
+    heroHeadline: 'قارن <span class="highlight">أسعار البقالة</span><br>في كل أرجاء المملكة',
+    heroSubline: 'ابحث فوراً في 8 متاجر كبرى — نون، كارفور، بنده، لولو والمزيد — واعثر على أفضل سعر في ثوانٍ.',
+    live: 'أسعار مباشرة · تحديث فوري',
+    try: 'جرّب:',
+    statStores: '8 متاجر',
+    statProducts: '+500 منتج',
+    saved: 'وُفّرت',
+    bestPrice: 'أفضل سعر',
+    basketTitle: '🛍️ سلة التسوق',
+    basketEmpty: 'سلة التسوق فارغة.',
+    trending: '🔥 اتجاهات البحث:',
+    compareBtn: '🔍 قارن الإجمالي في جميع المتاجر',
+    dir: 'rtl',
+  },
+};
+
+let currentLang = localStorage.getItem('gc_lang') || 'en';
+
+function applyLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('gc_lang', lang);
+  const t = I18N[lang];
+  document.documentElement.setAttribute('dir', t.dir);
+  document.documentElement.setAttribute('lang', lang);
+
+  const inp = $('searchInput');
+  if (inp) inp.placeholder = t.searchPlaceholder;
+
+  const sBtn = $('searchBtn');
+  if (sBtn) sBtn.title = t.searchBtnTitle;
+
+  const bBtn = $('basketBtn');
+  if (bBtn) {
+    const cnt = $('basketCount');
+    bBtn.childNodes[0].textContent = t.basket;
+    if (cnt) bBtn.appendChild(cnt);
+  }
+
+  const headline = $('heroHeadline');
+  if (headline) headline.innerHTML = t.heroHeadline;
+
+  const subline = $('heroSubline');
+  if (subline) subline.textContent = t.heroSubline;
+
+  const tryLbl = $('tryLabel');
+  if (tryLbl) tryLbl.textContent = t.try;
+
+  const statStoresEl = $('statStores');
+  if (statStoresEl) statStoresEl.textContent = t.statStores;
+
+  const statProdEl = $('statProducts');
+  if (statProdEl) statProdEl.textContent = t.statProducts;
+
+  document.querySelectorAll('.i18n-live').forEach(el => { el.textContent = t.live; });
+  document.querySelectorAll('.i18n-saved').forEach(el => { el.textContent = t.saved; });
+
+  const bHeader = document.querySelector('.basket-header h2');
+  if (bHeader) bHeader.textContent = t.basketTitle;
+
+  const bEmpty = document.querySelector('.basket-empty p');
+  if (bEmpty) bEmpty.textContent = t.basketEmpty;
+
+  const cmpBtn = $('basketCompareBtn');
+  if (cmpBtn) cmpBtn.textContent = t.compareBtn;
+
+  const langBtnEl = $('langBtn');
+  if (langBtnEl) langBtnEl.textContent = lang === 'ar' ? 'EN' : 'AR';
+}
+
+applyLang(currentLang);
+
+$('langBtn').addEventListener('click', () => {
+  applyLang(currentLang === 'en' ? 'ar' : 'en');
 });
 
 /* ════════════════════════════════════════════════════════════════
@@ -2485,6 +2727,49 @@ $('basketCompareBtn').addEventListener('click', async () => {
     btn.textContent = '🔍 Compare Total Across All Stores';
   }
 });
+
+/* ════════════════════════════════════════════════════════════════
+   PWA INSTALL BANNER
+════════════════════════════════════════════════════════════════ */
+let pwaPromptEvent = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  pwaPromptEvent = e;
+  // Show banner after 30 seconds
+  setTimeout(() => {
+    if (pwaPromptEvent && !localStorage.getItem('gc_pwa_dismissed')) {
+      $('pwa-banner').classList.add('visible');
+    }
+  }, 30000);
+});
+$('pwaInstallBtn').addEventListener('click', async () => {
+  if (!pwaPromptEvent) return;
+  pwaPromptEvent.prompt();
+  const result = await pwaPromptEvent.userChoice;
+  pwaPromptEvent = null;
+  $('pwa-banner').classList.remove('visible');
+});
+$('pwaDismissBtn').addEventListener('click', () => {
+  $('pwa-banner').classList.remove('visible');
+  localStorage.setItem('gc_pwa_dismissed', '1');
+});
+
+/* ════════════════════════════════════════════════════════════════
+   SAVINGS COUNTER (SOCIAL PROOF)
+════════════════════════════════════════════════════════════════ */
+async function fetchSavingsStats() {
+  try {
+    const r = await fetch('/api/stats/savings', { signal: AbortSignal.timeout(3000) });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.totalSavings > 0) {
+      $('statSavingsNum').textContent = data.totalSavings.toFixed(2);
+      $('statSavingsPill').style.display = 'inline-flex';
+    }
+  } catch (_) {}
+}
+fetchSavingsStats();
+setInterval(fetchSavingsStats, 60000);
 
 function renderBasketResults(data) {
   const resultsEl = $('basketResults');
