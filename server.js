@@ -172,19 +172,29 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ─── Demo mode (auto-enabled when browser unavailable) ────────── */
+/* ─── Demo mode ─────────────────────────────────────────────────
+ * Auto-enabled when:
+ *  a) Playwright/Chromium is unavailable, OR
+ *  b) No PROXY_URL is configured (Saudi stores block non-Saudi IPs,
+ *     so scraping from Railway/Render US datacenter always returns 0)
+ * ────────────────────────────────────────────────────────────── */
 let DEMO_MODE = false;
 
-// Check browser availability at startup
-(async () => {
-  try {
-    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-    await testBrowser.close();
-  } catch (_) {
-    DEMO_MODE = true;
-    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
-  }
-})();
+if (!PROXY_URL) {
+  DEMO_MODE = true;
+  console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
+} else {
+  // Only test browser when a proxy is configured and scraping may work
+  (async () => {
+    try {
+      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+      await testBrowser.close();
+    } catch (_) {
+      DEMO_MODE = true;
+      console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+    }
+  })();
+}
 
 // Each category entry: keywords (Arabic/English) that map to its products
 const DEMO_CATALOG = [
@@ -972,6 +982,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     res.flush?.();
   };
 
+  let usedDemoFallback = false;
   write('start', { query, stores: STORES.length, demo: DEMO_MODE });
 
   const allResults = [];
@@ -1006,24 +1017,22 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     ));
     allResults.push(...results);
 
-    // If all stores came back empty, stream demo data instead
+    // If all stores came back empty, replace results with demo data
     const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
     if (totalProducts === 0) {
       console.log(`[stream] No products found for "${query}" — falling back to demo data`);
-      allResults.length = 0;
-      for (const store of STORES) {
-        const storeData = {
-          id: store.id, name: store.name, ar: store.ar,
-          emoji: store.emoji, color: store.color,
-          products: getDemoProducts(query, store.id), error: null,
+      for (let i = 0; i < allResults.length; i++) {
+        allResults[i] = {
+          ...allResults[i],
+          products: getDemoProducts(query, allResults[i].id),
+          error: null,
         };
-        write('store', storeData);
-        allResults.push(storeData);
       }
+      usedDemoFallback = true;
     }
   }
 
-  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || undefined, stores: allResults };
+  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults);
   write('done', finalData);
