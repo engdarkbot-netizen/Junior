@@ -789,6 +789,15 @@ async function runScrape(query) {
     const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
     storeResults.push(...batchResults);
   }
+
+  const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
+
+  // If no products found from any store (likely bot-blocked), fall back to demo
+  if (totalProducts === 0) {
+    console.log(`[scrape] No products found for "${query}" — falling back to demo data`);
+    return runDemoScrape(query);
+  }
+
   return {
     query,
     timestamp: new Date().toISOString(),
@@ -902,6 +911,22 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
         })
       ));
       allResults.push(...results);
+    }
+
+    // If all stores came back empty, stream demo data instead
+    const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
+    if (totalProducts === 0) {
+      console.log(`[stream] No products found for "${query}" — falling back to demo data`);
+      allResults.length = 0;
+      for (const store of STORES) {
+        const storeData = {
+          id: store.id, name: store.name, ar: store.ar,
+          emoji: store.emoji, color: store.color,
+          products: getDemoProducts(query, store.id), error: null,
+        };
+        write('store', storeData);
+        allResults.push(storeData);
+      }
     }
   }
 
