@@ -19,10 +19,15 @@ const zlib       = require('zlib');
 const { chromium } = require('playwright');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
+const MAX_QUERY_LEN = 200;
+
 function normalizeQuery(q) {
   return q
     .trim()
+    .slice(0, MAX_QUERY_LEN)
     .toLowerCase()
+    .replace(/[<>"'`]/g, '')                 // strip HTML-dangerous chars before storing
+    .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)) // Arabic-Indic → ASCII digits
     .replace(/[\u064B-\u065F\u0670]/g, '')   // strip diacritics (tashkeel)
     .replace(/[أإآٱ]/g, 'ا')                 // unify alef variants
     .replace(/ة/g, 'ه')                      // ta marbuta → ha
@@ -93,6 +98,7 @@ const analytics = {
   cacheHits:     0,
   cacheMisses:   0,
   queryCount:    new Map(),  // normalizedQuery -> count
+  queryLastSeen: new Map(),  // normalizedQuery -> timestamp
   storeResults:  new Map(),  // storeId -> { success, fail, totalProducts }
   responseTimes: [],         // last 500 { query, ms, cached, ts }
   startedAt:     Date.now(),
@@ -103,6 +109,7 @@ function trackSearch(nKey, ms, cached, stores) {
   if (cached) analytics.cacheHits++;
   else        analytics.cacheMisses++;
   analytics.queryCount.set(nKey, (analytics.queryCount.get(nKey) || 0) + 1);
+  analytics.queryLastSeen.set(nKey, Date.now());
   analytics.responseTimes.push({ query: nKey, ms, cached, ts: Date.now() });
   if (analytics.responseTimes.length > 500) analytics.responseTimes.shift();
   if (stores) {
@@ -164,6 +171,113 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+/* ─── Demo mode (auto-enabled when browser unavailable) ────────── */
+let DEMO_MODE = false;
+
+// Check browser availability at startup
+(async () => {
+  try {
+    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    await testBrowser.close();
+  } catch (_) {
+    DEMO_MODE = true;
+    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+  }
+})();
+
+const DEMO_PRODUCTS = {
+  default: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة كامل الدسم ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك ١ لتر', price: 4.50, image: '', url: '#' },
+  ],
+  milk: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
+    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+  ],
+  حليب: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
+    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+  ],
+  rice: [
+    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
+    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
+    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
+  ],
+  أرز: [
+    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
+    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
+    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
+  ],
+  water: [
+    { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)', price: 11.50, image: '', url: '#' },
+    { name: 'مياه بيتا ١.٥ لتر', price: 1.95, image: '', url: '#' },
+    { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price: 9.75, image: '', url: '#' },
+  ],
+  eggs: [
+    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
+    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
+  ],
+  بيض: [
+    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
+    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
+  ],
+};
+
+// Price variance per store (±%) to simulate price differences
+const STORE_VARIANCE = {
+  noon:      +0.05,
+  carrefour: -0.03,
+  panda:     +0.08,
+  danube:    -0.01,
+  lulu:      -0.06,
+  tamimi:    +0.02,
+  othaim:    -0.04,
+  bindawood: +0.01,
+};
+
+function getDemoProducts(query, storeId) {
+  const key = normalizeQuery(query);
+  // Find best matching demo set
+  let products = DEMO_PRODUCTS.default;
+  for (const [k, v] of Object.entries(DEMO_PRODUCTS)) {
+    if (key.includes(k) || k.includes(key)) { products = v; break; }
+  }
+  const variance = STORE_VARIANCE[storeId] || 0;
+  // Apply per-store price variance and round to 2dp
+  return products.map(p => ({
+    ...p,
+    price: Math.round(p.price * (1 + variance) * 100) / 100,
+    url: STORES.find(s => s.id === storeId)?.url(query) || '#',
+  }));
+}
+
+async function runDemoScrape(query) {
+  // Simulate realistic latency per store
+  await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+  return {
+    query,
+    timestamp: new Date().toISOString(),
+    demo: true,
+    stores: STORES.map(s => ({
+      id:       s.id,
+      name:     s.name,
+      ar:       s.ar,
+      emoji:    s.emoji,
+      color:    s.color,
+      products: getDemoProducts(query, s.id),
+      error:    null,
+    })),
+  };
+}
 
 /* ─── Browser pool ─────────────────────────────────────────────── */
 let browserInstance = null;
@@ -257,32 +371,38 @@ async function extractProducts(page, storeName) {
     /* 2. Common CSS selector patterns used by major e-commerce platforms */
     const SELECTORS = {
       containers: [
-        // Generic
+        // Generic data attributes
         '[data-testid*="product"]',
         '[data-qa*="product"]',
         '[data-component*="product"]',
+        '[data-product-id]',
+        '[data-item-id]',
         // Salla platform (Panda, others)
-        '.salla-product-card',
         'salla-product-card',
-        // Noon
+        '.salla-product-card',
+        // Noon (React, dynamic class names)
         '[class*="productContainer"]',
+        '[class*="productCard"]',
+        '[class*="ProductCard"]',
         '[class*="product-container"]',
         '[class*="productBox"]',
-        // Magento (LuLu, Othaim)
-        '.product-item',
-        '.product-card',
-        'li.product',
-        '.item.product',
         // SAP Spartacus (Carrefour)
         'cx-product-grid-item',
         'cx-product-list-item',
-        // Shopify
+        // Magento 2 (LuLu, Othaim, Danube)
+        '.product-item-info',
         '.product-item',
+        'li.product',
+        '.item.product',
+        // Shopify (Tamimi)
         '[class*="ProductItem"]',
+        '[class*="product-item"]',
+        '.grid__item',
         // Danube / Bin Dawood
-        '.product',
-        '[class*="product_card"]',
         '[class*="ProductCard"]',
+        '[class*="product_card"]',
+        '.product-card',
+        '.product',
       ],
       names: [
         '[data-qa*="name"]', '[data-testid*="name"]',
@@ -309,7 +429,7 @@ async function extractProducts(page, storeName) {
     // Try each container selector
     for (const sel of SELECTORS.containers) {
       const containers = [...document.querySelectorAll(sel)];
-      if (containers.length < 2) continue;
+      if (containers.length < 1) continue;
 
       for (const container of containers.slice(0, 10)) {
         let name  = '';
@@ -327,15 +447,19 @@ async function extractProducts(page, storeName) {
         for (const ps of SELECTORS.prices) {
           const el = container.querySelector(ps);
           if (el) {
-            const txt = el.textContent.replace(/[^\d.٫٬]/g, '').replace('٫', '.').replace('٬', '');
-            const n = parseFloat(txt);
+            const raw = el.textContent
+              .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))  // Arabic-Indic → ASCII
+              .replace(/[^\d.٫٬,]/g, '')
+              .replace(/٫/g, '.').replace(/٬/g, '').replace(/,/g, '');
+            const n = parseFloat(raw);
             if (n > 0) { price = n; break; }
           }
         }
 
         // Fallback: regex search for SAR price pattern in container text
         if (!price) {
-          const txt = container.textContent;
+          const txt = container.textContent
+            .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
           const m = txt.match(/(?:SAR|ر\.س|SR)\s*([\d,]+\.?\d*)/i)
                  || txt.match(/([\d,]+\.?\d*)\s*(?:SAR|ر\.س|SR)/i)
                  || txt.match(/(\d+\.\d{2})/);
@@ -377,6 +501,117 @@ async function extractProducts(page, storeName) {
   }, storeName);
 }
 
+/* ─── Per-store API JSON extractors (network interception) ─────── */
+function parseArabicPrice(str) {
+  return parseFloat(
+    String(str)
+      .replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+      .replace(/[^\d.]/g, '')
+  ) || 0;
+}
+
+function extractFromApiJson(json, storeId) {
+  try {
+    // ── Noon ──────────────────────────────────────────────────
+    if (storeId === 'noon') {
+      const hits = json.hits || json.data?.hits || json.results?.hits || [];
+      if (hits.length) return hits.slice(0, 10).map(h => ({
+        name:  h.name  || h.title || '',
+        price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
+        image: h.image_keys?.[0]
+          ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg`
+          : (h.image || ''),
+        url: h.url ? `https://www.noon.com${h.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Carrefour (SAP Spartacus OCC) ────────────────────────
+    if (storeId === 'carrefour') {
+      const products = json.products || json.data?.products || [];
+      if (products.length) return products.slice(0, 10).map(p => ({
+        name:  p.name || '',
+        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+        image: p.images?.[0]?.url || p.image?.url || '',
+        url:   p.url ? `https://www.carrefourksa.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Tamimi (Shopify) ─────────────────────────────────────
+    if (storeId === 'tamimi') {
+      const products = json.resources?.results?.products
+                    || json.products
+                    || json.items || [];
+      if (products.length) return products.slice(0, 10).map(p => ({
+        name:  p.title || p.name || '',
+        // Shopify: price is in cents as string e.g. "895" = 8.95
+        price: parseArabicPrice(p.price) > 100
+               ? parseArabicPrice(p.price) / 100
+               : parseArabicPrice(p.price),
+        image: p.image || p.featured_image || '',
+        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    }
+
+    // ── Panda (Salla) ────────────────────────────────────────
+    if (storeId === 'panda') {
+      const products = json.data || json.products || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name?.ar || p.name?.en || p.name || p.title || '',
+          price: parseArabicPrice(p.price?.amount ?? p.price ?? 0),
+          image: p.thumbnail || p.image?.url || '',
+          url:   p.url || p.slug || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Danube ───────────────────────────────────────────────
+    if (storeId === 'danube') {
+      const products = json.products || json.data?.products || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.final_price ?? p.price ?? 0),
+          image: p.image || p.thumbnail || '',
+          url:   p.url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Generic: walk JSON tree for product arrays ───────────
+    const candidates = [];
+    function walkJson(node, depth = 0) {
+      if (depth > 5 || candidates.length >= 10) return;
+      if (Array.isArray(node) && node.length >= 1) {
+        const first = node[0];
+        if (first && typeof first === 'object') {
+          const hasName  = 'name' in first || 'title' in first;
+          const hasPrice = 'price' in first || 'sale_price' in first || 'amount' in first;
+          if (hasName && hasPrice) {
+            node.slice(0, 10).forEach(p => {
+              const name  = p.name || p.title || '';
+              const price = parseArabicPrice(
+                p.sale_price ?? p.price?.amount ?? p.price?.value ?? p.price ?? 0
+              );
+              if (name && price > 0) candidates.push({ name, price, image: p.image || '', url: p.url || '' });
+            });
+            return;
+          }
+        }
+      }
+      if (node && typeof node === 'object' && !Array.isArray(node)) {
+        for (const val of Object.values(node)) {
+          if (val && typeof val === 'object') walkJson(val, depth + 1);
+        }
+      }
+    }
+    walkJson(json);
+    return candidates;
+  } catch (_) {
+    return [];
+  }
+}
+
 /* ─── Individual store scrapers ────────────────────────────────── */
 
 const STORES = [
@@ -387,7 +622,7 @@ const STORES = [
     emoji: '⚫',
     color: '#f9c74f',
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
-    waitFor: '[data-qa="product-name"], [class*="productContainer"], .sc-bdVTJa',
+    waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
   },
   {
     id:   'carrefour',
@@ -432,7 +667,7 @@ const STORES = [
     emoji: '🏪',
     color: '#457b9d',
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .grid__item, .product-item',
+    waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
   },
   {
     id:   'othaim',
@@ -459,28 +694,56 @@ async function scrapeStore(store, query) {
                    storeEmoji: store.emoji, storeColor: store.color,
                    products: [], error: null };
   let page = null;
+  const capturedApiProducts = [];
+
   try {
     const browser = await getBrowser();
     page = await newPage(browser);
-    await page.goto(store.url(query), {
-      timeout: 25000,
-      waitUntil: 'domcontentloaded',
+
+    // ── Intercept JSON API responses before DOM scraping ──────
+    const SKIP_API = /\.(css|js|woff|png|jpg|svg|ico|gif|mp4)(\?|$)/i;
+    const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics/i;
+
+    page.on('response', async (response) => {
+      try {
+        const url = response.url();
+        if (SKIP_API.test(url) || SKIP_HOST.test(url)) return;
+        const ct = response.headers()['content-type'] || '';
+        if (!ct.includes('json')) return;
+        const json = await response.json();
+        const products = extractFromApiJson(json, store.id);
+        if (products.length > 0) {
+          capturedApiProducts.push(...products);
+          console.log(`[${store.id}] API captured ${products.length} products from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+        }
+      } catch (_) {}
     });
 
-    // Wait for either products or a short timeout
-    try {
-      await page.waitForSelector(store.waitFor, { timeout: 8000 });
-    } catch (_) {
-      // Selector may not match exactly — still try to extract
+    // Use 'load' so JS-rendered content is available; fall back on timeout
+    await page.goto(store.url(query), {
+      timeout: 28000,
+      waitUntil: 'load',
+    }).catch(() => {}); // page timeout is non-fatal — we may have API data
+
+    // If API already gave us enough, skip DOM wait
+    if (capturedApiProducts.length < 2) {
+      try {
+        await page.waitForSelector(store.waitFor, { timeout: 7000 });
+      } catch (_) {}
+      await page.waitForTimeout(1500);
     }
 
-    // Extra wait for JS-heavy pages
-    await page.waitForTimeout(2000);
+    // Prefer API-captured data; fall back to DOM extraction
+    if (capturedApiProducts.length >= 1) {
+      result.products = capturedApiProducts
+        .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i) // dedup
+        .slice(0, 8);
+    } else {
+      result.products = await extractProducts(page, store.name);
+    }
 
-    result.products = await extractProducts(page, store.name);
   } catch (err) {
     result.error = err.message.split('\n')[0];
-    // If browser crashed, clear the instance so it gets recreated next time
     if (browserInstance && !browserInstance.isConnected()) {
       browserInstance = null;
     }
@@ -494,6 +757,8 @@ async function scrapeStore(store, query) {
 
 /* ─── Shared scrape runner (used by both endpoints) ────────────── */
 async function runScrape(query) {
+  if (DEMO_MODE) return runDemoScrape(query);
+
   const storeResults = [];
   for (let i = 0; i < STORES.length; i += 2) {
     const batch = STORES.slice(i, i + 2);
@@ -519,6 +784,7 @@ async function runScrape(query) {
 app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  if (query.length > MAX_QUERY_LEN) return res.status(400).json({ error: `Query too long (max ${MAX_QUERY_LEN} characters)` });
 
   const key = normalizeQuery(query);
 
@@ -563,7 +829,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
 /* ─── GET /api/search/stream — Server-Sent Events ──────────────── */
 app.get('/api/search/stream', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
-  if (!query) return res.status(400).end();
+  if (!query || query.length > MAX_QUERY_LEN) return res.status(400).end();
   const key = normalizeQuery(query);
 
   res.setHeader('Content-Type',  'text/event-stream; charset=utf-8');
@@ -577,31 +843,45 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     res.flush?.();
   };
 
-  write('start', { query, stores: STORES.length });
+  write('start', { query, stores: STORES.length, demo: DEMO_MODE });
 
   const allResults = [];
 
-  for (let i = 0; i < STORES.length; i += 2) {
-    const batch = STORES.slice(i, i + 2);
-    const results = await Promise.all(batch.map(store =>
-      scrapeStore(store, query).then(sr => {
-        const storeData = {
-          id:       sr.storeId,
-          name:     sr.storeName,
-          ar:       sr.storeAr,
-          emoji:    sr.storeEmoji,
-          color:    sr.storeColor,
-          products: sr.products,
-          error:    sr.error,
-        };
-        write('store', storeData);
-        return storeData;
-      })
-    ));
-    allResults.push(...results);
+  if (DEMO_MODE) {
+    // Stream demo results store-by-store with realistic delays
+    for (const store of STORES) {
+      await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
+      const storeData = {
+        id: store.id, name: store.name, ar: store.ar,
+        emoji: store.emoji, color: store.color,
+        products: getDemoProducts(query, store.id), error: null,
+      };
+      write('store', storeData);
+      allResults.push(storeData);
+    }
+  } else {
+    for (let i = 0; i < STORES.length; i += 2) {
+      const batch = STORES.slice(i, i + 2);
+      const results = await Promise.all(batch.map(store =>
+        scrapeStore(store, query).then(sr => {
+          const storeData = {
+            id:       sr.storeId,
+            name:     sr.storeName,
+            ar:       sr.storeAr,
+            emoji:    sr.storeEmoji,
+            color:    sr.storeColor,
+            products: sr.products,
+            error:    sr.error,
+          };
+          write('store', storeData);
+          return storeData;
+        })
+      ));
+      allResults.push(...results);
+    }
   }
 
-  const finalData = { query, timestamp: new Date().toISOString(), stores: allResults };
+  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || undefined, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults);
   write('done', finalData);
@@ -660,6 +940,11 @@ app.get('/api/basket', rateLimit, async (req, res) => {
     });
   });
 
+  // Round totals to avoid floating-point precision artefacts (e.g. 6.060000000005)
+  Object.values(storeMap).forEach(s => {
+    s.total = Math.round(s.total * 100) / 100;
+  });
+
   const stores = Object.values(storeMap)
     .filter(s => s.total > 0 || s.missing > 0)
     .sort((a, b) => {
@@ -676,7 +961,11 @@ app.get('/api/trending', (req, res) => {
   const trending = [...analytics.queryCount.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([query, count]) => ({ query, count }));
+    .map(([query, count]) => ({
+      query,
+      count,
+      lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+    }));
   res.json({ trending, total: analytics.totalSearches });
 });
 
@@ -713,7 +1002,10 @@ app.get('/api/stats', (req, res) => {
     topQueries:    [...analytics.queryCount.entries()]
                      .sort((a, b) => b[1] - a[1])
                      .slice(0, 10)
-                     .map(([query, count]) => ({ query, count })),
+                     .map(([query, count]) => ({
+                       query, count,
+                       lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+                     })),
     stores,
   });
 });
@@ -723,7 +1015,8 @@ app.get('/api/health', (_, res) => res.json({
   status: 'ok',
   uptime: process.uptime(),
   memory: process.memoryUsage(),
-  browser: browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none',
+  browser: DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
+  demo: DEMO_MODE,
   stores: STORES.map(s => s.id),
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),
