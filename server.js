@@ -14,7 +14,7 @@ const path    = require('path');
 const { chromium } = require('playwright');
 
 const app  = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
@@ -26,11 +26,17 @@ async function getBrowser() {
   if (!browserInstance || !browserInstance.isConnected()) {
     browserInstance = await chromium.launch({
       headless: true,
+      // In Docker (Railway/Render) the browser lives at PLAYWRIGHT_BROWSERS_PATH
+      executablePath: process.env.PLAYWRIGHT_BROWSERS_PATH
+        ? undefined   // let Playwright auto-resolve from env
+        : undefined,  // local: uses npx playwright install chromium path
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
         '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process',
       ],
     });
   }
