@@ -973,6 +973,12 @@ function checkPriceAlerts(nKey, stores) {
   }
 }
 
+/* ─── GET /api/ping — uptime probe ─────────────────────────────── */
+app.get('/api/ping', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.send('pong');
+});
+
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
 app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
