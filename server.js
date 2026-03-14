@@ -18,6 +18,18 @@ const path       = require('path');
 const zlib       = require('zlib');
 const { chromium } = require('playwright');
 
+/* ─── Arabic/English query normaliser ──────────────────────────── */
+function normalizeQuery(q) {
+  return q
+    .trim()
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')   // strip diacritics (tashkeel)
+    .replace(/[أإآٱ]/g, 'ا')                 // unify alef variants
+    .replace(/ة/g, 'ه')                      // ta marbuta → ha
+    .replace(/ى/g, 'ي')                      // alef maqsura → ya
+    .replace(/\s+/g, ' ');
+}
+
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
@@ -72,6 +84,35 @@ function cacheSet(key, data) {
 
 /* ─── In-flight request deduplication ─────────────────────────── */
 const inflight = new Map(); // key -> Promise
+
+/* ─── Search analytics ─────────────────────────────────────────── */
+const analytics = {
+  totalSearches: 0,
+  cacheHits:     0,
+  cacheMisses:   0,
+  queryCount:    new Map(),  // normalizedQuery -> count
+  storeResults:  new Map(),  // storeId -> { success, fail, totalProducts }
+  responseTimes: [],         // last 500 { query, ms, cached, ts }
+  startedAt:     Date.now(),
+};
+
+function trackSearch(nKey, ms, cached, stores) {
+  analytics.totalSearches++;
+  if (cached) analytics.cacheHits++;
+  else        analytics.cacheMisses++;
+  analytics.queryCount.set(nKey, (analytics.queryCount.get(nKey) || 0) + 1);
+  analytics.responseTimes.push({ query: nKey, ms, cached, ts: Date.now() });
+  if (analytics.responseTimes.length > 500) analytics.responseTimes.shift();
+  if (stores) {
+    stores.forEach(s => {
+      if (!analytics.storeResults.has(s.id))
+        analytics.storeResults.set(s.id, { success: 0, fail: 0, totalProducts: 0 });
+      const r = analytics.storeResults.get(s.id);
+      if (s.error && !(s.products && s.products.length)) r.fail++;
+      else { r.success++; r.totalProducts += s.products ? s.products.length : 0; }
+    });
+  }
+}
 
 /* ─── Simple per-IP rate limiter (20 req/min) ──────────────────── */
 const RATE_LIMIT   = 20;
@@ -477,7 +518,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
 
-  const key = query.toLowerCase();
+  const key = normalizeQuery(query);
 
   // Cache hit
   const hit = cacheGet(key);
@@ -485,6 +526,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     const age = Math.floor((Date.now() - hit.ts) / 1000);
     res.setHeader('X-Cache',     'HIT');
     res.setHeader('X-Cache-Age', `${age}s`);
+    trackSearch(key, age * 1000, true, hit.data.stores);
     return res.json({ ...hit.data, cached: true, cacheAge: age });
   }
 
@@ -493,6 +535,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     console.log(`[search] "${query}" — dedup`);
     res.setHeader('X-Cache', 'DEDUP');
     const data = await inflight.get(key);
+    trackSearch(key, 0, false, data.stores);
     return res.json(data);
   }
 
@@ -500,12 +543,14 @@ app.get('/api/search', rateLimit, async (req, res) => {
   console.log(`[search] "${query}"`);
   res.setHeader('X-Cache', 'MISS');
 
+  const t0 = Date.now();
   const promise = runScrape(query).finally(() => inflight.delete(key));
   inflight.set(key, promise);
 
   try {
     const data = await promise;
     cacheSet(key, data);
+    trackSearch(key, Date.now() - t0, false, data.stores);
     res.json(data);
   } catch (err) {
     console.error('[search error]', err.message);
@@ -517,6 +562,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
 app.get('/api/search/stream', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).end();
+  const key = normalizeQuery(query);
 
   res.setHeader('Content-Type',  'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -554,7 +600,8 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   }
 
   const finalData = { query, timestamp: new Date().toISOString(), stores: allResults };
-  cacheSet(query.toLowerCase(), finalData);
+  cacheSet(key, finalData);
+  trackSearch(key, 0, false, allResults);
   write('done', finalData);
   res.end();
 });
@@ -573,6 +620,54 @@ const _origLog   = console.log.bind(console);
 const _origError = console.error.bind(console);
 console.log   = (...a) => { _origLog(...a);   addLog('info',  ...a.map(String)); };
 console.error = (...a) => { _origError(...a); addLog('error', ...a.map(String)); };
+
+/* ─── GET /api/trending — top searched queries ─────────────────── */
+app.get('/api/trending', (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit || '10', 10), 20);
+  const trending = [...analytics.queryCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([query, count]) => ({ query, count }));
+  res.json({ trending, total: analytics.totalSearches });
+});
+
+/* ─── GET /api/stats — business analytics ──────────────────────── */
+app.get('/api/stats', (req, res) => {
+  const recent = analytics.responseTimes.slice(-100);
+  const avgMs  = recent.length
+    ? Math.round(recent.reduce((s, r) => s + r.ms, 0) / recent.length)
+    : 0;
+  const hitRate = analytics.totalSearches > 0
+    ? ((analytics.cacheHits / analytics.totalSearches) * 100).toFixed(1) + '%'
+    : '0.0%';
+
+  const stores = {};
+  for (const [id, r] of analytics.storeResults) {
+    const total = r.success + r.fail;
+    stores[id] = {
+      ...r,
+      successRate: total > 0 ? ((r.success / total) * 100).toFixed(1) + '%' : 'n/a',
+      avgProducts: r.success > 0 ? (r.totalProducts / r.success).toFixed(1) : '0',
+    };
+  }
+
+  res.json({
+    uptime:        Math.floor(process.uptime()),
+    startedAt:     new Date(analytics.startedAt).toISOString(),
+    totalSearches: analytics.totalSearches,
+    cacheHits:     analytics.cacheHits,
+    cacheMisses:   analytics.cacheMisses,
+    cacheHitRate:  hitRate,
+    cacheSize:     searchCache.size,
+    avgResponseMs: avgMs,
+    uniqueQueries: analytics.queryCount.size,
+    topQueries:    [...analytics.queryCount.entries()]
+                     .sort((a, b) => b[1] - a[1])
+                     .slice(0, 10)
+                     .map(([query, count]) => ({ query, count })),
+    stores,
+  });
+});
 
 /* ─── Health check ─────────────────────────────────────────────── */
 app.get('/api/health', (_, res) => res.json({

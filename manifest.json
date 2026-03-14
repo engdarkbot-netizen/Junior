@@ -1,0 +1,42 @@
+{
+  "name": "GroceryCompare SA",
+  "short_name": "GroceryCompare",
+  "description": "Compare live grocery prices across all major Saudi supermarkets — Noon, Carrefour, Panda, LuLu and more.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0f0a",
+  "theme_color": "#0f5132",
+  "lang": "ar-SA",
+  "dir": "rtl",
+  "categories": ["shopping", "food"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search حليب",
+      "short_name": "حليب",
+      "description": "Compare milk prices across Saudi stores",
+      "url": "/?q=%D8%AD%D9%84%D9%8A%D8%A8"
+    },
+    {
+      "name": "Search أرز",
+      "short_name": "أرز",
+      "description": "Compare rice prices across Saudi stores",
+      "url": "/?q=%D8%A3%D8%B1%D8%B2"
+    }
+  ]
+}
