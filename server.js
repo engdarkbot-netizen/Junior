@@ -165,6 +165,113 @@ app.use((req, res, next) => {
   next();
 });
 
+/* ─── Demo mode (auto-enabled when browser unavailable) ────────── */
+let DEMO_MODE = false;
+
+// Check browser availability at startup
+(async () => {
+  try {
+    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    await testBrowser.close();
+  } catch (_) {
+    DEMO_MODE = true;
+    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+  }
+})();
+
+const DEMO_PRODUCTS = {
+  default: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة كامل الدسم ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك ١ لتر', price: 4.50, image: '', url: '#' },
+  ],
+  milk: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
+    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+  ],
+  حليب: [
+    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
+    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
+    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+  ],
+  rice: [
+    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
+    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
+    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
+  ],
+  أرز: [
+    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
+    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
+    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
+  ],
+  water: [
+    { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)', price: 11.50, image: '', url: '#' },
+    { name: 'مياه بيتا ١.٥ لتر', price: 1.95, image: '', url: '#' },
+    { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price: 9.75, image: '', url: '#' },
+  ],
+  eggs: [
+    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
+    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
+  ],
+  بيض: [
+    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
+    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
+  ],
+};
+
+// Price variance per store (±%) to simulate price differences
+const STORE_VARIANCE = {
+  noon:      +0.05,
+  carrefour: -0.03,
+  panda:     +0.08,
+  danube:    -0.01,
+  lulu:      -0.06,
+  tamimi:    +0.02,
+  othaim:    -0.04,
+  bindawood: +0.01,
+};
+
+function getDemoProducts(query, storeId) {
+  const key = normalizeQuery(query);
+  // Find best matching demo set
+  let products = DEMO_PRODUCTS.default;
+  for (const [k, v] of Object.entries(DEMO_PRODUCTS)) {
+    if (key.includes(k) || k.includes(key)) { products = v; break; }
+  }
+  const variance = STORE_VARIANCE[storeId] || 0;
+  // Apply per-store price variance and round to 2dp
+  return products.map(p => ({
+    ...p,
+    price: Math.round(p.price * (1 + variance) * 100) / 100,
+    url: STORES.find(s => s.id === storeId)?.url(query) || '#',
+  }));
+}
+
+async function runDemoScrape(query) {
+  // Simulate realistic latency per store
+  await new Promise(r => setTimeout(r, 300 + Math.random() * 400));
+  return {
+    query,
+    timestamp: new Date().toISOString(),
+    demo: true,
+    stores: STORES.map(s => ({
+      id:       s.id,
+      name:     s.name,
+      ar:       s.ar,
+      emoji:    s.emoji,
+      color:    s.color,
+      products: getDemoProducts(query, s.id),
+      error:    null,
+    })),
+  };
+}
+
 /* ─── Browser pool ─────────────────────────────────────────────── */
 let browserInstance = null;
 
@@ -494,6 +601,8 @@ async function scrapeStore(store, query) {
 
 /* ─── Shared scrape runner (used by both endpoints) ────────────── */
 async function runScrape(query) {
+  if (DEMO_MODE) return runDemoScrape(query);
+
   const storeResults = [];
   for (let i = 0; i < STORES.length; i += 2) {
     const batch = STORES.slice(i, i + 2);
@@ -577,28 +686,42 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     res.flush?.();
   };
 
-  write('start', { query, stores: STORES.length });
+  write('start', { query, stores: STORES.length, demo: DEMO_MODE });
 
   const allResults = [];
 
-  for (let i = 0; i < STORES.length; i += 2) {
-    const batch = STORES.slice(i, i + 2);
-    const results = await Promise.all(batch.map(store =>
-      scrapeStore(store, query).then(sr => {
-        const storeData = {
-          id:       sr.storeId,
-          name:     sr.storeName,
-          ar:       sr.storeAr,
-          emoji:    sr.storeEmoji,
-          color:    sr.storeColor,
-          products: sr.products,
-          error:    sr.error,
-        };
-        write('store', storeData);
-        return storeData;
-      })
-    ));
-    allResults.push(...results);
+  if (DEMO_MODE) {
+    // Stream demo results store-by-store with realistic delays
+    for (const store of STORES) {
+      await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
+      const storeData = {
+        id: store.id, name: store.name, ar: store.ar,
+        emoji: store.emoji, color: store.color,
+        products: getDemoProducts(query, store.id), error: null,
+      };
+      write('store', storeData);
+      allResults.push(storeData);
+    }
+  } else {
+    for (let i = 0; i < STORES.length; i += 2) {
+      const batch = STORES.slice(i, i + 2);
+      const results = await Promise.all(batch.map(store =>
+        scrapeStore(store, query).then(sr => {
+          const storeData = {
+            id:       sr.storeId,
+            name:     sr.storeName,
+            ar:       sr.storeAr,
+            emoji:    sr.storeEmoji,
+            color:    sr.storeColor,
+            products: sr.products,
+            error:    sr.error,
+          };
+          write('store', storeData);
+          return storeData;
+        })
+      ));
+      allResults.push(...results);
+    }
   }
 
   const finalData = { query, timestamp: new Date().toISOString(), stores: allResults };
@@ -723,7 +846,8 @@ app.get('/api/health', (_, res) => res.json({
   status: 'ok',
   uptime: process.uptime(),
   memory: process.memoryUsage(),
-  browser: browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none',
+  browser: DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
+  demo: DEMO_MODE,
   stores: STORES.map(s => s.id),
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),

@@ -1553,6 +1553,7 @@ function renderResults(data, ms) {
   let meta = `${totalProducts} products · ${storesWithProducts.length} of ${STORES.length} stores`;
   if (ms) meta += ` · ${ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's'}`;
   if (data.cached) meta += ` <span class="cache-badge">⚡ cached</span>`;
+  if (data.demo) meta += ` <span class="cache-badge" style="background:#b45309;color:#fef3c7" title="Live data requires deployment with internet access">🎭 demo data</span>`;
   $('resultsMeta').innerHTML = meta;
 
   // Store filter bar
