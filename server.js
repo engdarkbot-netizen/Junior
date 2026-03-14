@@ -186,51 +186,143 @@ let DEMO_MODE = false;
   }
 })();
 
-const DEMO_PRODUCTS = {
-  default: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة كامل الدسم ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك ١ لتر', price: 4.50, image: '', url: '#' },
-  ],
-  milk: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
-    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
-  ],
-  حليب: [
-    { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
-    { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
-    { name: 'حليب الجهينة طازج ٢ لتر', price: 7.95, image: '', url: '#' },
-    { name: 'حليب نادك كامل الدسم ١ لتر', price: 4.50, image: '', url: '#' },
-    { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
-  ],
-  rice: [
-    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
-    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
-    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
-  ],
-  أرز: [
-    { name: 'أرز السلة بسمتي ٢ كجم', price: 14.95, image: '', url: '#' },
-    { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم', price: 32.50, image: '', url: '#' },
-    { name: 'أرز المراعي بسمتي ١ كجم', price: 8.75, image: '', url: '#' },
-  ],
-  water: [
-    { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)', price: 11.50, image: '', url: '#' },
-    { name: 'مياه بيتا ١.٥ لتر', price: 1.95, image: '', url: '#' },
-    { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price: 9.75, image: '', url: '#' },
-  ],
-  eggs: [
-    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
-    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
-  ],
-  بيض: [
-    { name: 'بيض المراعي وايت ٣٠ بيضة', price: 19.95, image: '', url: '#' },
-    { name: 'بيض بلدي طازج ١٥ بيضة', price: 13.50, image: '', url: '#' },
-  ],
-};
+// Each category entry: keywords (Arabic/English) that map to its products
+const DEMO_CATALOG = [
+  {
+    keywords: ['milk', 'حليب', 'حلب', 'مراعي', 'الجهينه', 'جهينه', 'نادك'],
+    products: [
+      { name: 'حليب المراعي كامل الدسم ٢ لتر', price: 8.50, image: '', url: '#' },
+      { name: 'حليب المراعي قليل الدسم ٢ لتر', price: 8.25, image: '', url: '#' },
+      { name: 'حليب الجهينة طازج ٢ لتر',        price: 7.95, image: '', url: '#' },
+      { name: 'حليب نادك كامل الدسم ١ لتر',     price: 4.50, image: '', url: '#' },
+      { name: 'حليب UHT المراعي ١ لتر (٤ عبوات)', price: 18.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['rice', 'أرز', 'ارز', 'بسمتي', 'السله', 'الكيف'],
+    products: [
+      { name: 'أرز السلة بسمتي ٢ كجم',              price: 14.95, image: '', url: '#' },
+      { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم',  price: 32.50, image: '', url: '#' },
+      { name: 'أرز المراعي بسمتي ١ كجم',            price:  8.75, image: '', url: '#' },
+      { name: 'أرز تمر هندي بسمتي ٢ كجم',           price: 13.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['water', 'مياه', 'ماء', 'نيوم', 'بيتا', 'مياة'],
+    products: [
+      { name: 'مياه نيوم ١.٥ لتر (٦ عبوات)',     price: 11.50, image: '', url: '#' },
+      { name: 'مياه بيتا ١.٥ لتر',               price:  1.95, image: '', url: '#' },
+      { name: 'مياه المراعي ٠.٥ لتر (١٢ عبوة)', price:  9.75, image: '', url: '#' },
+      { name: 'مياه هنا ١.٥ لتر (٦ عبوات)',     price: 10.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['eggs', 'egg', 'بيض', 'بيضه', 'بيضة'],
+    products: [
+      { name: 'بيض المراعي وايت ٣٠ بيضة',  price: 19.95, image: '', url: '#' },
+      { name: 'بيض بلدي طازج ١٥ بيضة',    price: 13.50, image: '', url: '#' },
+      { name: 'بيض الوطنية ٣٠ بيضة',       price: 18.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['bread', 'خبز', 'عيش', 'تميس', 'صامولي', 'بالدي'],
+    products: [
+      { name: 'خبز عيش بلدي (١٠ أرغفة)',         price:  2.50, image: '', url: '#' },
+      { name: 'خبز صامولي أبيض كبير (٦ حبات)',    price:  4.75, image: '', url: '#' },
+      { name: 'خبز تميس كامل الحبة (٥ حبات)',     price:  5.95, image: '', url: '#' },
+      { name: 'خبز التوست الذهبي بر ٥٠٠ جم',      price:  6.25, image: '', url: '#' },
+      { name: 'خبز الحبوب الكاملة لوزان ٤٠٠ جم', price:  8.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['chicken', 'دجاج', 'فراخ', 'فروج', 'كنتاكي', 'مبرد'],
+    products: [
+      { name: 'دجاج كامل طازج مبرد (١.٨ كجم تقريباً)', price: 22.95, image: '', url: '#' },
+      { name: 'صدر دجاج طازج مبرد ١ كجم',              price: 19.50, image: '', url: '#' },
+      { name: 'أفخاذ دجاج مبردة ١ كجم',               price: 14.75, image: '', url: '#' },
+      { name: 'دجاج مقطع ٨ قطع مبرد',                  price: 26.95, image: '', url: '#' },
+      { name: 'فيليه دجاج مجمد نادك ٩٠٠ جم',           price: 24.50, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['oil', 'زيت', 'زيوت', 'نخيل', 'ذرة', 'طبخ', 'cooking'],
+    products: [
+      { name: 'زيت دوار الشمس نيدو ١.٥ لتر',    price: 14.95, image: '', url: '#' },
+      { name: 'زيت الذرة المراعي ١.٨ لتر',       price: 16.50, image: '', url: '#' },
+      { name: 'زيت زيتون بكر ممتاز لوزيان ٧٥٠مل', price: 34.95, image: '', url: '#' },
+      { name: 'زيت نخيل مكرر ١.٥ لتر',           price: 11.25, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['sugar', 'سكر', 'سكره', 'محلى'],
+    products: [
+      { name: 'سكر أبيض ناعم ٢ كجم',       price:  8.25, image: '', url: '#' },
+      { name: 'سكر قصب بني ١ كجم',          price:  9.50, image: '', url: '#' },
+      { name: 'سكر أبيض ٥ كجم المراعي',    price: 18.75, image: '', url: '#' },
+      { name: 'سكر بودرة ناعم ٥٠٠ جم',     price:  5.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['coffee', 'قهوة', 'قهوه', 'نسكافيه', 'نسكافيه', 'كافيه', 'espresso', 'nescafe'],
+    products: [
+      { name: 'نسكافيه كلاسيك ٢٠٠ جم',            price: 34.95, image: '', url: '#' },
+      { name: 'قهوة عربية بالهيل المراعي ٢٥٠ جم', price: 22.50, image: '', url: '#' },
+      { name: 'قهوة نسبريسو كبسولات ١٠ حبة',      price: 49.95, image: '', url: '#' },
+      { name: 'نسكافيه جولد ٢٠٠ جم',              price: 52.50, image: '', url: '#' },
+      { name: 'قهوة دانكن دونتس أصلي ٢٨٦ جم',    price: 39.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['dates', 'تمر', 'تمور', 'عجوه', 'مجدول', 'خلاص', 'سكري'],
+    products: [
+      { name: 'تمر سكري فاخر ١ كجم',       price: 28.95, image: '', url: '#' },
+      { name: 'تمر مجدول مغربي ٥٠٠ جم',   price: 39.95, image: '', url: '#' },
+      { name: 'تمر عجوة المدينة ٥٠٠ جم',  price: 45.00, image: '', url: '#' },
+      { name: 'تمر خلاص فاخر ١ كجم',      price: 32.50, image: '', url: '#' },
+      { name: 'تمر صفاوي ١ كجم',           price: 24.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['yogurt', 'زبادي', 'زباده', 'يوغرت', 'لبن رايب', 'لبن'],
+    products: [
+      { name: 'زبادي المراعي طبيعي ٤ × ١٧٠ جم', price:  8.50, image: '', url: '#' },
+      { name: 'زبادي الجهينة بالفراولة ١٧٠ جم', price:  2.75, image: '', url: '#' },
+      { name: 'لبن رايب المراعي ٤٠٠ مل',         price:  5.25, image: '', url: '#' },
+      { name: 'زبادي يوناني لاكنوز ١٥٠ جم',      price:  3.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['cheese', 'جبن', 'جبنه', 'جبنة', 'كريم', 'شيدر', 'موزاريلا'],
+    products: [
+      { name: 'جبن شيدر كرافت شرائح ٢٠٠ جم',      price: 16.95, image: '', url: '#' },
+      { name: 'جبن كريمي فيلادلفيا ١٧٥ جم',        price: 18.50, image: '', url: '#' },
+      { name: 'جبن أبيض طري المراعي ٥٠٠ جم',       price: 14.25, image: '', url: '#' },
+      { name: 'جبن موزاريلا مبشور ٢٠٠ جم',         price: 19.95, image: '', url: '#' },
+      { name: 'جبن حلوم مشوي الطيبات ٢٥٠ جم',      price: 22.75, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['tomato', 'tomatoes', 'طماطم', 'طمطم', 'بندوره', 'بندورة'],
+    products: [
+      { name: 'طماطم طازجة ١ كجم',              price:  4.95, image: '', url: '#' },
+      { name: 'طماطم كرزية ٢٥٠ جم',            price:  6.50, image: '', url: '#' },
+      { name: 'معجون طماطم هاينز ١٣٥ جم',      price:  4.25, image: '', url: '#' },
+      { name: 'صلصة طماطم إيطالية باريلا ٤٠٠ جم', price: 11.95, image: '', url: '#' },
+    ],
+  },
+  {
+    keywords: ['onion', 'onions', 'بصل', 'بصله', 'ثوم'],
+    products: [
+      { name: 'بصل أبيض طازج ١ كجم',    price:  3.95, image: '', url: '#' },
+      { name: 'بصل أحمر طازج ١ كجم',    price:  4.50, image: '', url: '#' },
+      { name: 'ثوم طازج رأس (٣ رؤوس)', price:  5.25, image: '', url: '#' },
+      { name: 'بصل أخضر (٢٠٠ جم)',      price:  2.95, image: '', url: '#' },
+    ],
+  },
+];
+
+// Default fallback (milk — most commonly searched)
+const DEMO_DEFAULT = DEMO_CATALOG[0].products;
 
 // Price variance per store (±%) to simulate price differences
 const STORE_VARIANCE = {
@@ -246,11 +338,20 @@ const STORE_VARIANCE = {
 
 function getDemoProducts(query, storeId) {
   const key = normalizeQuery(query);
-  // Find best matching demo set
-  let products = DEMO_PRODUCTS.default;
-  for (const [k, v] of Object.entries(DEMO_PRODUCTS)) {
-    if (key.includes(k) || k.includes(key)) { products = v; break; }
+  // Find best matching demo set using broad keyword matching
+  let bestCategory = null;
+  let bestScore = 0;
+  for (const category of DEMO_CATALOG) {
+    for (const kw of category.keywords) {
+      const normKw = normalizeQuery(kw);
+      // Score: exact substring match in either direction
+      if (key.includes(normKw) || normKw.includes(key)) {
+        const score = normKw.length; // longer keyword = more specific = higher score
+        if (score > bestScore) { bestScore = score; bestCategory = category; }
+      }
+    }
   }
+  const products = bestCategory ? bestCategory.products : DEMO_DEFAULT;
   const variance = STORE_VARIANCE[storeId] || 0;
   // Apply per-store price variance and round to 2dp
   return products.map(p => ({
@@ -783,12 +884,7 @@ async function scrapeStore(store, query) {
 async function runScrape(query) {
   if (DEMO_MODE) return runDemoScrape(query);
 
-  const storeResults = [];
-  for (let i = 0; i < STORES.length; i += 2) {
-    const batch = STORES.slice(i, i + 2);
-    const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
-    storeResults.push(...batchResults);
-  }
+  const storeResults = await Promise.all(STORES.map(store => scrapeStore(store, query)));
 
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
@@ -893,25 +989,22 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
       allResults.push(storeData);
     }
   } else {
-    for (let i = 0; i < STORES.length; i += 2) {
-      const batch = STORES.slice(i, i + 2);
-      const results = await Promise.all(batch.map(store =>
-        scrapeStore(store, query).then(sr => {
-          const storeData = {
-            id:       sr.storeId,
-            name:     sr.storeName,
-            ar:       sr.storeAr,
-            emoji:    sr.storeEmoji,
-            color:    sr.storeColor,
-            products: sr.products,
-            error:    sr.error,
-          };
-          write('store', storeData);
-          return storeData;
-        })
-      ));
-      allResults.push(...results);
-    }
+    const results = await Promise.all(STORES.map(store =>
+      scrapeStore(store, query).then(sr => {
+        const storeData = {
+          id:       sr.storeId,
+          name:     sr.storeName,
+          ar:       sr.storeAr,
+          emoji:    sr.storeEmoji,
+          color:    sr.storeColor,
+          products: sr.products,
+          error:    sr.error,
+        };
+        write('store', storeData);
+        return storeData;
+      })
+    ));
+    allResults.push(...results);
 
     // If all stores came back empty, stream demo data instead
     const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
