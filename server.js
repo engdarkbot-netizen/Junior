@@ -42,7 +42,6 @@ async function getBrowser() {
         '--disable-dev-shm-usage',
         '--disable-gpu',
         '--no-zygote',
-        '--single-process',
       ],
     });
   }
@@ -318,12 +317,14 @@ const STORES = [
   },
 ];
 
-async function scrapeStore(store, query, browser) {
-  const page = await newPage(browser);
+async function scrapeStore(store, query) {
   const result = { storeId: store.id, storeName: store.name, storeAr: store.ar,
                    storeEmoji: store.emoji, storeColor: store.color,
                    products: [], error: null };
+  let page = null;
   try {
+    const browser = await getBrowser();
+    page = await newPage(browser);
     await page.goto(store.url(query), {
       timeout: 25000,
       waitUntil: 'domcontentloaded',
@@ -342,8 +343,14 @@ async function scrapeStore(store, query, browser) {
     result.products = await extractProducts(page, store.name);
   } catch (err) {
     result.error = err.message.split('\n')[0];
+    // If browser crashed, clear the instance so it gets recreated next time
+    if (browserInstance && !browserInstance.isConnected()) {
+      browserInstance = null;
+    }
   } finally {
-    await page.context().close();
+    if (page) {
+      await page.context().close().catch(() => {});
+    }
   }
   return result;
 }
@@ -356,12 +363,13 @@ app.get('/api/search', async (req, res) => {
   console.log(`[search] "${query}"`);
 
   try {
-    const browser = await getBrowser();
-
-    // Scrape all stores in parallel
-    const storeResults = await Promise.all(
-      STORES.map(store => scrapeStore(store, query, browser))
-    );
+    // Scrape stores with limited concurrency (2 at a time) to avoid browser crashes
+    const storeResults = [];
+    for (let i = 0; i < STORES.length; i += 2) {
+      const batch = STORES.slice(i, i + 2);
+      const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
+      storeResults.push(...batchResults);
+    }
 
     // Build unified product list: for each store, take top match
     const response = {
