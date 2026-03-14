@@ -12,10 +12,11 @@
  *   PROXY_PASS    - Proxy password
  */
 
-const express    = require('express');
-const cors       = require('cors');
-const path       = require('path');
-const zlib       = require('zlib');
+const express      = require('express');
+const cors         = require('cors');
+const path         = require('path');
+const zlib         = require('zlib');
+const compression  = require('compression');
 const { chromium } = require('playwright');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
@@ -38,7 +39,19 @@ function normalizeQuery(q) {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-/* ─── Compression middleware (gzip/deflate) ────────────────────── */
+/* ─── Compression middleware ────────────────────────────────────── */
+// compression() handles HTML/static files; the custom wrapper below
+// handles JSON responses (keeps Content-Length accurate for gzip'd JSON)
+app.use(compression({
+  filter: (req, res) => {
+    // Skip SSE streams (must not be buffered/compressed)
+    if (res.getHeader('Content-Type')?.includes('text/event-stream')) return false;
+    return compression.filter(req, res);
+  },
+  threshold: 1024, // only compress responses > 1KB
+}));
+
+// Custom JSON gzip wrapper (ensures Content-Length is set correctly)
 app.use((req, res, next) => {
   const ae = req.headers['accept-encoding'] || '';
   if (!ae.includes('gzip')) return next();
@@ -152,19 +165,24 @@ const analytics = {
   totalSearches: 0,
   cacheHits:     0,
   cacheMisses:   0,
-  queryCount:    new Map(),  // normalizedQuery -> count
-  queryLastSeen: new Map(),  // normalizedQuery -> timestamp
-  storeResults:  new Map(),  // storeId -> { success, fail, totalProducts }
-  responseTimes: [],         // last 500 { query, ms, cached, ts }
+  queryCount:    new Map(),    // normalizedQuery -> count
+  queryLastSeen: new Map(),    // normalizedQuery -> timestamp
+  queryOriginal: new Map(),    // normalizedQuery -> first original user query
+  storeResults:  new Map(),    // storeId -> { success, fail, totalProducts }
+  responseTimes: [],           // last 500 { query, ms, cached, ts }
   startedAt:     Date.now(),
 };
 
-function trackSearch(nKey, ms, cached, stores) {
+function trackSearch(nKey, ms, cached, stores, originalQuery) {
   analytics.totalSearches++;
   if (cached) analytics.cacheHits++;
   else        analytics.cacheMisses++;
   analytics.queryCount.set(nKey, (analytics.queryCount.get(nKey) || 0) + 1);
   analytics.queryLastSeen.set(nKey, Date.now());
+  // Keep the first original query seen for this normalized key
+  if (originalQuery && !analytics.queryOriginal.has(nKey)) {
+    analytics.queryOriginal.set(nKey, originalQuery);
+  }
   analytics.responseTimes.push({ query: nKey, ms, cached, ts: Date.now() });
   if (analytics.responseTimes.length > 500) analytics.responseTimes.shift();
   if (stores) {
@@ -509,24 +527,21 @@ const STORE_VARIANCE = {
   bindawood: +0.01,
 };
 
+// Build a normalized lookup so "أرز" key matches normalized query "ارز"
+const DEMO_PRODUCTS_NORMALIZED = Object.fromEntries(
+  Object.entries(DEMO_PRODUCTS).map(([k, v]) => [normalizeQuery(k), v])
+);
+
 function getDemoProducts(query, storeId) {
   const key = normalizeQuery(query);
-  // Find best matching demo set using broad keyword matching
-  let bestCategory = null;
-  let bestScore = 0;
-  for (const category of DEMO_CATALOG) {
-    for (const kw of category.keywords) {
-      const normKw = normalizeQuery(kw);
-      // Score: exact substring match in either direction
-      if (key.includes(normKw) || normKw.includes(key)) {
-        const score = normKw.length; // longer keyword = more specific = higher score
-        if (score > bestScore) { bestScore = score; bestCategory = category; }
-      }
-    }
+  // Find best matching demo set using normalized keys (fixes أ→ا mismatch)
+  let products = DEMO_PRODUCTS_NORMALIZED.default;
+  for (const [normKey, v] of Object.entries(DEMO_PRODUCTS_NORMALIZED)) {
+    if (normKey === 'default') continue;
+    if (key.includes(normKey) || normKey.includes(key)) { products = v; break; }
   }
   const products = bestCategory ? bestCategory.products : DEMO_DEFAULT;
   const variance = STORE_VARIANCE[storeId] || 0;
-  // Apply per-store price variance and round to 2dp
   return products.map(p => ({
     ...p,
     price: Math.round(p.price * (1 + variance) * 100) / 100,
@@ -1118,10 +1133,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     const age = Math.floor((Date.now() - hit.ts) / 1000);
     res.setHeader('X-Cache',     'HIT');
     res.setHeader('X-Cache-Age', `${age}s`);
-    const etag = `"${Buffer.from(hit.data.timestamp).toString('base64').slice(0,12)}"`;
-    res.setHeader('ETag', etag);
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
-    trackSearch(key, age * 1000, true, hit.data.stores);
+    trackSearch(key, 0, true, hit.data.stores, query); // cache hits have near-zero latency
     return res.json({ ...hit.data, cached: true, cacheAge: age });
   }
 
@@ -1130,7 +1142,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
     console.log(`[search] "${query}" — dedup`);
     res.setHeader('X-Cache', 'DEDUP');
     const data = await inflight.get(key);
-    trackSearch(key, 0, false, data.stores);
+    trackSearch(key, 0, false, data.stores, query);
     return res.json(data);
   }
 
@@ -1145,12 +1157,7 @@ app.get('/api/search', rateLimit, async (req, res) => {
   try {
     const data = await promise;
     cacheSet(key, data);
-    trackSearch(key, Date.now() - t0, false, data.stores);
-    recordPriceHistory(key, data.stores);
-    checkPriceAlerts(key, data.stores);
-    const etag = `"${Buffer.from(data.timestamp).toString('base64').slice(0,12)}"`;
-    res.setHeader('ETag', etag);
-    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    trackSearch(key, Date.now() - t0, false, data.stores, query);
     res.json(data);
   } catch (err) {
     console.error('[search error]', err.message);
@@ -1161,7 +1168,8 @@ app.get('/api/search', rateLimit, async (req, res) => {
 /* ─── GET /api/search/stream — Server-Sent Events ──────────────── */
 app.get('/api/search/stream', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
-  if (!query || query.length > MAX_QUERY_LEN) return res.status(400).end();
+  if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
+  if (query.length > MAX_QUERY_LEN) return res.status(400).json({ error: `Query too long (max ${MAX_QUERY_LEN} characters)` });
   const key = normalizeQuery(query);
 
   res.setHeader('Content-Type',  'text/event-stream; charset=utf-8');
@@ -1227,9 +1235,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
 
   const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
   cacheSet(key, finalData);
-  trackSearch(key, 0, false, allResults);
-  recordPriceHistory(key, allResults);
-  checkPriceAlerts(key, allResults);
+  trackSearch(key, 0, false, allResults, query);
   write('done', finalData);
   res.end();
 });
@@ -1281,7 +1287,7 @@ console.error = (...a) => { _origError(...a); addLog('error', ...a.map(String));
 /* ─── GET /api/basket — multi-item basket comparison ───────────── */
 app.get('/api/basket', rateLimit, async (req, res) => {
   const rawQueries = Array.isArray(req.query.q) ? req.query.q : [req.query.q];
-  const queries = rawQueries.map(q => (q || '').trim()).filter(Boolean);
+  const queries = [...new Set(rawQueries.map(q => (q || '').trim()).filter(Boolean))]; // dedup
   if (!queries.length) return res.status(400).json({ error: 'Missing query parameter ?q=' });
   if (queries.length > 10) return res.status(400).json({ error: 'Maximum 10 items per basket' });
 
@@ -1376,10 +1382,10 @@ app.get('/api/trending', (req, res) => {
   const trending = [...analytics.queryCount.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([query, count]) => ({
-      query,
+    .map(([nKey, count]) => ({
+      query:        analytics.queryOriginal.get(nKey) || nKey,
       count,
-      lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
+      lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
     }));
   res.json({ trending, total: analytics.totalSearches });
 });
@@ -1416,27 +1422,23 @@ app.get('/api/stats', (req, res) => {
   const errorLogs = recentLogs.filter(e => e.level === 'error');
 
   res.json({
-    uptime:               Math.floor(process.uptime()),
-    startedAt:            new Date(analytics.startedAt).toISOString(),
-    totalSearches:        analytics.totalSearches,
-    cacheHits:            analytics.cacheHits,
-    cacheMisses:          analytics.cacheMisses,
-    cacheHitRate:         hitRate,
-    cacheSize:            searchCache.size,
-    avgResponseMs:        avgMs,
-    uniqueQueries:        analytics.queryCount.size,
-    demoMode:             DEMO_MODE,
-    demoReason:           DEMO_REASON,
-    alertsCount:          priceAlerts.size,
-    priceHistoryQueries:  priceHistory.size,
-    recentErrors:         errorLogs.slice(-5),
-    topQueries:           [...analytics.queryCount.entries()]
-                            .sort((a, b) => b[1] - a[1])
-                            .slice(0, 10)
-                            .map(([query, count]) => ({
-                              query, count,
-                              lastSearched: new Date(analytics.queryLastSeen.get(query) || Date.now()).toISOString(),
-                            })),
+    uptime:        Math.floor(process.uptime()),
+    startedAt:     new Date(analytics.startedAt).toISOString(),
+    totalSearches: analytics.totalSearches,
+    cacheHits:     analytics.cacheHits,
+    cacheMisses:   analytics.cacheMisses,
+    cacheHitRate:  hitRate,
+    cacheSize:     searchCache.size,
+    avgResponseMs: avgMs,
+    uniqueQueries: analytics.queryCount.size,
+    topQueries:    [...analytics.queryCount.entries()]
+                     .sort((a, b) => b[1] - a[1])
+                     .slice(0, 10)
+                     .map(([nKey, count]) => ({
+                       query:        analytics.queryOriginal.get(nKey) || nKey,
+                       count,
+                       lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
+                     })),
     stores,
   });
 });
@@ -1482,23 +1484,9 @@ app.get('/api/logs', (req, res) => {
   res.json({ logs: recentLogs.slice(-n) });
 });
 
-/* ─── /api/version ─────────────────────────────────────────────── */
-app.get('/api/version', (_, res) => res.json({
-  version:     '1.0.0',
-  env:         process.env.NODE_ENV || 'development',
-  nodeVersion: process.version,
-  platform:    process.platform,
-}));
-
-/* ─── Request timeout middleware (30s) for /api/ routes ────────── */
-app.use('/api/', (req, res, next) => {
-  const timer = setTimeout(() => {
-    if (res.headersSent) return;
-    res.status(503).json({ error: 'Request timed out' });
-  }, 30_000);
-  res.on('finish', () => clearTimeout(timer));
-  res.on('close',  () => clearTimeout(timer));
-  next();
+/* ─── JSON 404 for /api/* routes (must be after all api routes) ── */
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
 });
 
 /* ─── Start ────────────────────────────────────────────────────── */
