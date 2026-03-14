@@ -40,7 +40,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
 /* ── Reset & Base ──────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -281,21 +281,39 @@ main {
 /* ── Hero ──────────────────────────────────────────────────────── */
 #hero {
   text-align: center;
-  padding: 5rem 1rem 4rem;
+  padding: 5rem 1.5rem 4rem;
+  background:
+    linear-gradient(135deg, #0a3d20 0%, #0f5132 50%, #0a3d20 100%);
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-xl);
+  margin-bottom: 2rem;
+}
+#hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
 }
 .hero-badge {
   display: inline-flex;
   align-items: center;
   gap: .4rem;
-  background: var(--green-pale);
-  color: var(--green-mid);
-  border: 1px solid rgba(21,128,61,.2);
+  background: rgba(255,255,255,.12);
+  color: rgba(255,255,255,.9);
+  border: 1px solid rgba(255,255,255,.2);
   padding: .3rem .9rem;
   border-radius: 20px;
   font-size: .78rem;
   font-weight: 600;
   margin-bottom: 1.5rem;
   letter-spacing: .01em;
+  position: relative;
+  z-index: 1;
 }
 .hero-badge .pulse-dot {
   width: 7px; height: 7px;
@@ -311,23 +329,27 @@ main {
 #hero h1 {
   font-size: clamp(2rem, 5vw, 3.2rem);
   font-weight: 800;
-  letter-spacing: -.04em;
-  line-height: 1.1;
-  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: #fff;
   margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
 }
 #hero h1 .highlight {
-  background: linear-gradient(135deg, var(--green-mid), var(--green-light));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #4ade80;
+  background: linear-gradient(transparent 65%, rgba(37,162,68,0.25) 65%);
+  -webkit-text-fill-color: initial;
+  text-decoration: none;
 }
 #hero p {
-  color: var(--text-muted);
+  color: rgba(255,255,255,.75);
   font-size: 1.05rem;
   max-width: 480px;
   margin: 0 auto 2.5rem;
   line-height: 1.7;
+  position: relative;
+  z-index: 1;
 }
 .store-grid {
   display: flex;
@@ -335,6 +357,8 @@ main {
   justify-content: center;
   gap: .5rem;
   margin-bottom: 2rem;
+  position: relative;
+  z-index: 1;
 }
 .store-pill {
   display: inline-flex;
@@ -356,28 +380,30 @@ main {
   justify-content: center;
   gap: .4rem;
   margin-top: 1.5rem;
+  position: relative;
+  z-index: 1;
 }
 .popular-searches span {
   font-size: .75rem;
-  color: var(--text-muted);
+  color: rgba(255,255,255,.6);
   align-self: center;
   margin-right: .2rem;
 }
 .ps-chip {
   padding: .28rem .7rem;
   border-radius: 20px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(255,255,255,.1);
   font-size: .8rem;
-  color: var(--text-2);
+  color: rgba(255,255,255,.85);
   cursor: pointer;
   transition: all var(--fast);
   font-family: inherit;
 }
 .ps-chip:hover {
-  background: var(--green-pale);
-  border-color: rgba(21,128,61,.3);
-  color: var(--green-mid);
+  background: rgba(255,255,255,.22);
+  border-color: rgba(255,255,255,.4);
+  color: #fff;
 }
 
 /* ── Loading skeleton ──────────────────────────────────────────── */
@@ -536,14 +562,16 @@ main {
 .product-card {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--green-light);
   border-radius: var(--r-xl);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  transition: box-shadow var(--med) var(--ease), transform var(--med) var(--ease);
-  animation: card-in var(--slow) var(--ease) both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: fadeInUp 0.4s ease forwards;
+  opacity: 0;
 }
 .product-card:hover {
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-lg);
   transform: translateY(-2px);
 }
 @keyframes card-in {
@@ -881,7 +909,7 @@ footer {
 .lang-btn:hover { background: rgba(255,255,255,.25); }
 
 /* ── RTL overrides ──────────────────────────────────────────────── */
-html[dir="rtl"] body { font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif; }
+html[dir="rtl"] body { font-family: 'Tajawal', system-ui, sans-serif; }
 html[dir="rtl"] .header-inner { flex-direction: row-reverse; }
 html[dir="rtl"] .header-actions { margin-left: 0; margin-right: auto; }
 html[dir="rtl"] .search-btn { right: auto; left: 6px; }
@@ -896,6 +924,8 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
 
 /* ── Stats bar (hero social proof) ─────────────────────────────── */
 .hero-stats-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
@@ -908,9 +938,9 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
   gap: .35rem;
   padding: .38rem .9rem;
   border-radius: 20px;
-  background: var(--green-pale);
-  border: 1px solid rgba(21,128,61,.2);
-  color: var(--green-mid);
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.2);
+  color: rgba(255,255,255,.9);
   font-size: .82rem;
   font-weight: 600;
 }
@@ -955,8 +985,9 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
 /* ── Smart Split Card ───────────────────────────────────────────── */
 #smart-split-card {
   margin-top: .9rem;
-  padding: 1rem 1.1rem;
-  background: linear-gradient(135deg, #d97706, #f59e0b);
+  padding: 1.25rem 1.25rem;
+  background: linear-gradient(135deg, #1e3a2f, #14532d);
+  border-top: 3px solid #d97706;
   border-radius: var(--r-md);
   color: #fff;
   font-size: .85rem;
@@ -969,14 +1000,15 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
   margin-bottom: .6rem;
 }
 .split-store-block {
-  background: rgba(255,255,255,.15);
+  background: rgba(255,255,255,.1);
   border-radius: var(--r-sm);
-  padding: .5rem .75rem;
+  padding: .6rem .85rem;
   margin-bottom: .45rem;
+  border: 1px solid rgba(255,255,255,.1);
 }
 .split-store-name { font-weight: 700; margin-bottom: .2rem; }
 .split-items { font-size: .78rem; opacity: .9; }
-.split-subtotal { font-weight: 600; font-size: .82rem; margin-top: .2rem; }
+.split-subtotal { font-weight: 600; font-size: .82rem; margin-top: .2rem; color: #fbbf24; }
 .split-total-line {
   margin-top: .6rem;
   padding-top: .55rem;
@@ -1001,6 +1033,7 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
   .card-badge { flex-direction: row; align-items: center; flex-wrap: wrap; }
   .results-actions { gap: .35rem; }
   .sort-select { font-size: .75rem; }
+  body { padding-bottom: 70px; }
 }
 @media (max-width: 420px) {
   main { padding: 1.5rem 1rem 4rem; }
@@ -1014,8 +1047,8 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
   display: flex; flex-direction: column; align-items: center;
   gap: .15rem;
 }
-.hero-stat-num { font-size: 1.4rem; font-weight: 800; color: #fff; }
-.hero-stat-label { font-size: .72rem; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .05em; }
+.hero-stat-num { font-size: 1.4rem; font-weight: 800; color: #fff; position: relative; z-index: 1; }
+.hero-stat-label { font-size: .72rem; color: rgba(255,255,255,.7); text-transform: uppercase; letter-spacing: .05em; position: relative; z-index: 1; }
 
 /* ── Shopping Basket ───────────────────────────────────────────── */
 .basket-btn {
@@ -1306,20 +1339,73 @@ html[dir="rtl"] .bsr-total { margin-right: auto; margin-left: 0; }
   display: none;
   align-items: center;
   gap: .75rem;
-  background: linear-gradient(135deg, var(--gold), #b45309);
+  background: linear-gradient(135deg, #064e3b, #065f46);
+  border-left: 4px solid #10b981;
   color: #fff;
-  border-radius: var(--r-xl);
-  padding: .85rem 1.5rem;
+  border-radius: 16px;
+  padding: 1.5rem;
   margin-bottom: 1.25rem;
-  box-shadow: 0 4px 16px rgba(217,119,6,.28);
+  box-shadow: 0 4px 16px rgba(6,78,59,.28);
   animation: card-in var(--slow) var(--ease) both;
   font-size: .92rem;
   font-weight: 500;
 }
 #savings-calc.visible { display: flex; }
-#savings-calc strong { font-weight: 800; font-size: 1.05rem; }
+#savings-calc strong { font-weight: 800; font-size: 1.5rem; color: #fbbf24; }
 .sc-icon { font-size: 1.6rem; flex-shrink: 0; }
 .sc-text { flex: 1; line-height: 1.45; }
+
+/* ── Micro-animations ──────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Staggered card animations */
+.product-card:nth-child(1) { animation-delay: 0s; }
+.product-card:nth-child(2) { animation-delay: 0.05s; }
+.product-card:nth-child(3) { animation-delay: 0.1s; }
+.product-card:nth-child(4) { animation-delay: 0.15s; }
+.product-card:nth-child(5) { animation-delay: 0.2s; }
+.product-card:nth-child(6) { animation-delay: 0.25s; }
+
+/* ── Store filter pill brand colors ────────────────────────────── */
+.sf-btn[data-store="noon"]      { border-left: 3px solid #ffd000; }
+.sf-btn[data-store="carrefour"] { border-left: 3px solid #003087; }
+.sf-btn[data-store="panda"]     { border-left: 3px solid #e31837; }
+.sf-btn[data-store="lulu"]      { border-left: 3px solid #00843d; }
+.sf-btn[data-store="danube"]    { border-left: 3px solid #0072bc; }
+.sf-btn[data-store="tamimi"]    { border-left: 3px solid #c8102e; }
+.sf-btn[data-store="othaim"]    { border-left: 3px solid #f47920; }
+.sf-btn[data-store="bindawood"] { border-left: 3px solid #2e7d32; }
+
+/* ── Typography improvements ───────────────────────────────────── */
+h2, .section-title { font-weight: 700; letter-spacing: -0.02em; }
+.price-num, .best-price-num { font-variant-numeric: tabular-nums; }
+.price-sar, .sar { font-size: .8em; font-weight: 500; opacity: .8; }
+
+/* ── Best price glow ────────────────────────────────────────────── */
+.price-row.best {
+  background: var(--green-pale);
+  box-shadow: 0 0 0 2px rgba(217,119,6,0.3), inset 0 0 20px rgba(217,119,6,0.05);
+}
+
+/* ── Mobile bottom bar ─────────────────────────────────────────── */
+.mobile-bottom-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: .75rem 1rem;
+  padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
+  z-index: 90;
+  gap: .5rem;
+  justify-content: space-around;
+  align-items: center;
+}
+@media (max-width: 680px) { .mobile-bottom-bar { display: flex; } }
   </style>
 </head>
 <body>
@@ -2953,5 +3039,11 @@ $('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
   };
 });
 </script>
+
+<!-- Mobile bottom bar -->
+<div class="mobile-bottom-bar">
+  <button onclick="document.getElementById('q') ? document.getElementById('q').focus() : document.getElementById('searchInput').focus()" style="flex:1;padding:.6rem;background:var(--green);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🔍 Search</button>
+  <button onclick="toggleBasket()" style="flex:1;padding:.6rem;background:var(--surface-alt);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🛒 Basket</button>
+</div>
 </body>
 </html>
