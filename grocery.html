@@ -2724,7 +2724,7 @@ $('basketCompareBtn').addEventListener('click', async () => {
     resultsEl.innerHTML = `<div style="color:var(--red);font-size:.85rem;padding:.5rem">Error: ${sanitize(err.message)}</div>`;
   } finally {
     btn.disabled = false;
-    btn.textContent = '🔍 Compare Total Across All Stores';
+    btn.textContent = I18N[currentLang].compareBtn;
   }
 });
 
@@ -2834,6 +2834,91 @@ function renderBasketResults(data) {
     ${rows.join('')}
     ${savings && parseFloat(savings) > 0 ? `<div style="margin-top:.75rem;padding:.65rem;background:var(--green-pale);border-radius:var(--r-md);font-size:.82rem;font-weight:600;color:var(--green)">💰 Save up to ${savings} SAR by choosing the best store</div>` : ''}
     ${bestSingleHtml}
+  `;
+
+  // Show smart split if 3+ items
+  if (data.queries && data.queries.length >= 3) {
+    renderSmartSplit(data);
+  } else {
+    const sc = $('smart-split-card');
+    if (sc) { sc.innerHTML = ''; sc.classList.remove('visible'); }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SMART SPLIT
+════════════════════════════════════════════════════════════════ */
+function renderSmartSplit(data) {
+  const splitCard = $('smart-split-card');
+  if (!splitCard) return;
+
+  // Build per-item cheapest store lookup
+  const queries = data.queries || [];
+  const stores = data.stores || [];
+
+  // For each query, find cheapest store
+  const itemBestStore = {}; // query -> { store, price }
+  queries.forEach(q => {
+    let best = null;
+    stores.forEach(s => {
+      if (s.missing === 0 || s.items) {
+        const storeItem = (s.items || []).find(it => it.query === q);
+        if (storeItem && storeItem.product && storeItem.product.price > 0) {
+          if (!best || storeItem.product.price < best.price) {
+            best = { store: s, price: storeItem.product.price, productName: storeItem.product.name };
+          }
+        }
+      }
+    });
+    if (best) itemBestStore[q] = best;
+  });
+
+  // Group by store
+  const storeGroups = {}; // storeId -> { store, items: [{query, price, name}] }
+  Object.entries(itemBestStore).forEach(([q, best]) => {
+    const sid = best.store.id;
+    if (!storeGroups[sid]) storeGroups[sid] = { store: best.store, items: [] };
+    storeGroups[sid].items.push({ query: q, price: best.price, productName: best.productName });
+  });
+
+  const groupArr = Object.values(storeGroups);
+  if (!groupArr.length) { splitCard.innerHTML = ''; splitCard.classList.remove('visible'); return; }
+
+  // Total cost of smart split
+  const splitTotal = Object.values(itemBestStore).reduce((s, b) => s + b.price, 0);
+
+  // Best single store total (fewest missing, then cheapest)
+  const completeStores = stores.filter(s => s.missing === 0 && s.total > 0);
+  if (!completeStores.length) { splitCard.innerHTML = ''; splitCard.classList.remove('visible'); return; }
+  const bestSingle = completeStores.reduce((a, b) => a.total <= b.total ? a : b);
+  const singleTotal = bestSingle.total;
+
+  const splitSavings = Math.round((singleTotal - splitTotal) * 100) / 100;
+
+  // Only worth showing if there's actually a split across 2+ stores
+  if (groupArr.length < 2) { splitCard.innerHTML = ''; splitCard.classList.remove('visible'); return; }
+
+  const blocksHtml = groupArr.map(g => {
+    const subtotal = g.items.reduce((s, it) => s + it.price, 0);
+    const itemList = g.items.map(it => sanitize(it.query)).join(', ');
+    return `
+      <div class="split-store-block">
+        <div class="split-store-name">${sanitize(g.store.emoji)} ${sanitize(g.store.name)}</div>
+        <div class="split-items">${itemList}</div>
+        <div class="split-subtotal">${formatSAR(subtotal)}</div>
+      </div>`;
+  }).join('');
+
+  const savingsNote = splitSavings > 0
+    ? `<div class="split-total-line">Total: ${formatSAR(Math.round(splitTotal * 100) / 100)} — You save ${formatSAR(splitSavings)} vs buying all at ${sanitize(bestSingle.emoji)} ${sanitize(bestSingle.name)}</div>
+       <div class="split-note">Worth splitting if savings > SAR 10 (fuel/time cost)</div>`
+    : `<div class="split-note">Single-store option is equally cost-effective for this basket.</div>`;
+
+  splitCard.classList.add('visible');
+  splitCard.innerHTML = `
+    <div class="split-title">✂️ Smart Split — Save More</div>
+    ${blocksHtml}
+    ${savingsNote}
   `;
 }
 
