@@ -1,780 +1,1455 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GroceryCompare SA | Real-Time Saudi Grocery Prices</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <title>GroceryCompare SA — Live Saudi Grocery Price Comparison</title>
+  <meta name="description" content="Compare live grocery prices from Noon, Carrefour, Panda, LuLu, Danube, Tamimi, Othaim and Bin Dawood — instantly." />
+  <meta name="theme-color" content="#0f5132" />
+  <meta property="og:title" content="GroceryCompare SA" />
+  <meta property="og:description" content="Find the best grocery prices across all major Saudi supermarkets in seconds." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* ── Reset & Base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
 
-    :root {
-      --green:       #1a7a4a;
-      --green-light: #26a865;
-      --green-pale:  #e8f5ee;
-      --accent:      #ff6b35;
-      --bg:          #f4f7f4;
-      --card:        #ffffff;
-      --text:        #1a2a1e;
-      --text-muted:  #6b7f6e;
-      --border:      #d4e4d8;
-      --shadow:      0 2px 12px rgba(26,122,74,0.10);
-      --shadow-lg:   0 8px 32px rgba(26,122,74,0.15);
-      --red:         #e63946;
-    }
+/* ── Design Tokens ─────────────────────────────────────────────── */
+:root {
+  --green:         #0f5132;
+  --green-mid:     #198754;
+  --green-light:   #25a244;
+  --green-pale:    #d1fae5;
+  --green-glass:   rgba(15,81,50,0.9);
+  --gold:          #d97706;
+  --gold-pale:     #fef3c7;
+  --red:           #dc2626;
+  --red-pale:      #fee2e2;
+  --bg:            #f0f4f0;
+  --surface:       #ffffff;
+  --surface-alt:   #f8faf8;
+  --border:        #e2e8f0;
+  --border-light:  #eef2ee;
+  --text:          #0f172a;
+  --text-2:        #334155;
+  --text-muted:    #64748b;
+  --text-faint:    #94a3b8;
+  --shadow-sm:     0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow:        0 4px 12px rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.04);
+  --shadow-lg:     0 12px 32px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.06);
+  --shadow-xl:     0 24px 48px rgba(0,0,0,.15);
+  --r-sm:  6px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-xl:  24px;
+  --r-2xl: 32px;
+  --ease:      cubic-bezier(0.23,1,0.32,1);
+  --ease-in:   cubic-bezier(0.4,0,1,1);
+  --ease-out:  cubic-bezier(0,0,0.2,1);
+  --fast:  0.15s;
+  --med:   0.25s;
+  --slow:  0.4s;
+}
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', sans-serif;
-      min-height: 100vh;
-    }
+[data-theme="dark"] {
+  --bg:           #0a0f0a;
+  --surface:      #111a11;
+  --surface-alt:  #172017;
+  --border:       #1e2e1e;
+  --border-light: #182318;
+  --text:         #f0fdf4;
+  --text-2:       #bbf7d0;
+  --text-muted:   #6b9e77;
+  --text-faint:   #3d6645;
+  --green-pale:   rgba(16,185,129,.12);
+  --gold-pale:    rgba(217,119,6,.15);
+  --red-pale:     rgba(220,38,38,.12);
+  --green-glass:  rgba(10,20,10,0.92);
+  --shadow-sm:    0 1px 3px rgba(0,0,0,.4);
+  --shadow:       0 4px 12px rgba(0,0,0,.5);
+  --shadow-lg:    0 12px 32px rgba(0,0,0,.6);
+  --shadow-xl:    0 24px 48px rgba(0,0,0,.7);
+}
 
-    /* ── HEADER ───────────────────────────────────── */
-    header {
-      background: var(--green);
-      color: #fff;
-      padding: 1.25rem 2rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
-    }
-    .header-inner {
-      max-width: 1000px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 1.3rem;
-      font-weight: 700;
-      white-space: nowrap;
-      text-decoration: none;
-      color: #fff;
-    }
-    .logo-sub { font-size: 0.6rem; font-weight: 400; opacity: 0.7; display: block; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition: background var(--med) var(--ease), color var(--med) var(--ease);
+}
 
-    .search-wrap {
-      flex: 1;
-      min-width: 220px;
-      position: relative;
-    }
-    #searchInput {
-      width: 100%;
-      padding: 0.7rem 3rem 0.7rem 1rem;
-      border: none;
-      border-radius: 10px;
-      font-size: 1rem;
-      font-family: inherit;
-      background: rgba(255,255,255,0.18);
-      color: #fff;
-      outline: none;
-      transition: background 0.2s;
-    }
-    #searchInput::placeholder { color: rgba(255,255,255,0.55); }
-    #searchInput:focus { background: rgba(255,255,255,0.28); }
-    .search-btn {
-      position: absolute;
-      right: 0.4rem;
-      top: 50%;
-      transform: translateY(-50%);
-      background: rgba(255,255,255,0.2);
-      border: none;
-      border-radius: 7px;
-      color: #fff;
-      padding: 0.4rem 0.7rem;
-      font-size: 1rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .search-btn:hover { background: rgba(255,255,255,0.35); }
+/* ── Header ────────────────────────────────────────────────────── */
+#header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: var(--green-glass);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  padding: 0 1.5rem;
+}
+.header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
 
-    /* ── STATUS BAR ───────────────────────────────── */
-    #status-bar {
-      display: none;
-      background: #fff9e6;
-      border-bottom: 1px solid #ffe88a;
-      padding: 0.5rem 2rem;
-      font-size: 0.82rem;
-      color: #7a5f00;
-      text-align: center;
-    }
-    #status-bar.visible { display: block; }
+/* Logo */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.logo-icon {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,.15);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.logo-text { color: #fff; }
+.logo-name { display: block; font-weight: 700; font-size: .95rem; line-height: 1.1; letter-spacing: -.02em; }
+.logo-tag  { display: block; font-size: .62rem; opacity: .6; font-weight: 400; letter-spacing: .02em; text-transform: uppercase; }
 
-    /* ── MAIN ─────────────────────────────────────── */
-    main {
-      max-width: 1000px;
-      margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
-    }
+/* Search */
+.search-wrap {
+  flex: 1;
+  position: relative;
+  max-width: 540px;
+}
+#searchInput {
+  width: 100%;
+  height: 42px;
+  padding: 0 3rem 0 1rem;
+  border: 1.5px solid rgba(255,255,255,.2);
+  border-radius: var(--r-xl);
+  background: rgba(255,255,255,.12);
+  color: #fff;
+  font-size: .95rem;
+  font-family: inherit;
+  outline: none;
+  transition: background var(--fast), border-color var(--fast);
+}
+#searchInput::placeholder { color: rgba(255,255,255,.45); }
+#searchInput:focus {
+  background: rgba(255,255,255,.2);
+  border-color: rgba(255,255,255,.4);
+}
+.search-btn {
+  position: absolute;
+  right: 6px; top: 50%;
+  transform: translateY(-50%);
+  width: 32px; height: 32px;
+  border-radius: var(--r-lg);
+  border: none;
+  background: rgba(255,255,255,.2);
+  color: #fff;
+  font-size: .9rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--fast);
+}
+.search-btn:hover { background: rgba(255,255,255,.32); }
 
-    /* ── HERO ─────────────────────────────────────── */
-    #hero {
-      text-align: center;
-      padding: 4rem 2rem 3rem;
-    }
-    #hero .big-emoji { font-size: 4rem; display: block; margin-bottom: 1rem; }
-    #hero h2 { font-size: 1.7rem; font-weight: 600; margin-bottom: 0.6rem; }
-    #hero p  { color: var(--text-muted); max-width: 440px; margin: 0 auto 2rem; line-height: 1.65; }
-    .store-tags {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.5rem;
-      margin-top: 1.5rem;
-    }
-    .store-tag {
-      padding: 0.3rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: #fff;
-    }
-    .tip {
-      margin-top: 2rem;
-      font-size: 0.82rem;
-      color: var(--text-muted);
-      background: var(--green-pale);
-      display: inline-block;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-    }
+/* Header actions */
+.header-actions { display: flex; align-items: center; gap: .5rem; margin-left: auto; flex-shrink: 0; }
+.icon-btn {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.1);
+  color: #fff;
+  font-size: .9rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--fast);
+}
+.icon-btn:hover { background: rgba(255,255,255,.22); }
 
-    /* ── RESULTS HEADER ───────────────────────────── */
-    #results-bar {
-      display: none;
-      align-items: baseline;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-    #results-bar.visible { display: flex; }
-    #results-bar h2 { font-size: 1.15rem; font-weight: 600; }
-    .results-meta { font-size: 0.82rem; color: var(--text-muted); }
-    .refresh-btn {
-      margin-left: auto;
-      padding: 0.35rem 0.85rem;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--card);
-      font-family: inherit;
-      font-size: 0.82rem;
-      cursor: pointer;
-      color: var(--text-muted);
-      transition: all 0.2s;
-    }
-    .refresh-btn:hover { border-color: var(--green); color: var(--green); }
+/* Search dropdown */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 300;
+  display: none;
+}
+.search-dropdown.open { display: block; }
+.dropdown-section { padding: .5rem 0; }
+.dropdown-label {
+  padding: .4rem 1rem .2rem;
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .55rem 1rem;
+  cursor: pointer;
+  transition: background var(--fast);
+  font-size: .9rem;
+  color: var(--text-2);
+}
+.dropdown-item:hover { background: var(--surface-alt); }
+.dropdown-item .di-icon { font-size: 1rem; width: 22px; text-align: center; }
+.dropdown-divider { height: 1px; background: var(--border-light); margin: .25rem 0; }
 
-    /* ── PRODUCT RESULT CARD ──────────────────────── */
-    .results-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
+/* ── Status bar ────────────────────────────────────────────────── */
+#status-bar {
+  height: 0;
+  overflow: hidden;
+  transition: height var(--med) var(--ease);
+  background: var(--gold-pale);
+  border-bottom: 1px solid rgba(217,119,6,.2);
+}
+#status-bar.visible { height: 36px; }
+#status-bar-inner {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  font-size: .8rem;
+  color: var(--gold);
+  font-weight: 500;
+  padding: 0 1.5rem;
+}
+#status-bar.success { background: var(--green-pale); border-color: rgba(21,128,61,.2); }
+#status-bar.success #status-bar-inner { color: var(--green-mid); }
+#status-bar.error   { background: var(--red-pale); border-color: rgba(220,38,38,.2); }
+#status-bar.error   #status-bar-inner { color: var(--red); }
 
-    .product-card {
-      background: var(--card);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-      overflow: hidden;
-      transition: box-shadow 0.2s;
-    }
-    .product-card:hover { box-shadow: var(--shadow-lg); }
+/* ── Main layout ───────────────────────────────────────────────── */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 6rem;
+}
 
-    .product-header {
-      padding: 1.25rem 1.5rem 1rem;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: flex-start;
-      gap: 1rem;
-    }
-    .product-img {
-      width: 70px;
-      height: 70px;
-      border-radius: 10px;
-      object-fit: contain;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .product-img-placeholder {
-      width: 70px;
-      height: 70px;
-      border-radius: 10px;
-      background: var(--green-pale);
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 2rem;
-      flex-shrink: 0;
-    }
-    .product-info { flex: 1; min-width: 0; }
-    .product-name {
-      font-size: 1.05rem;
-      font-weight: 600;
-      line-height: 1.3;
-      margin-bottom: 0.35rem;
-      /* truncate long names */
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .product-source {
-      font-size: 0.78rem;
-      color: var(--text-muted);
-    }
-    .product-source a {
-      color: var(--green);
-      text-decoration: none;
-    }
-    .product-source a:hover { text-decoration: underline; }
-    .best-price-badge {
-      background: var(--accent);
-      color: #fff;
-      padding: 0.25rem 0.7rem;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      font-weight: 700;
-      white-space: nowrap;
-      align-self: flex-start;
-      flex-shrink: 0;
-    }
+/* ── Hero ──────────────────────────────────────────────────────── */
+#hero {
+  text-align: center;
+  padding: 5rem 1rem 4rem;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  background: var(--green-pale);
+  color: var(--green-mid);
+  border: 1px solid rgba(21,128,61,.2);
+  padding: .3rem .9rem;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  letter-spacing: .01em;
+}
+.hero-badge .pulse-dot {
+  width: 7px; height: 7px;
+  background: var(--green-light);
+  border-radius: 50%;
+  animation: pulse-ring 1.8s ease infinite;
+}
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(37,162,68,.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(37,162,68,0); }
+  100% { box-shadow: 0 0 0 0 rgba(37,162,68,0); }
+}
+#hero h1 {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -.04em;
+  line-height: 1.1;
+  color: var(--text);
+  margin-bottom: 1rem;
+}
+#hero h1 .highlight {
+  background: linear-gradient(135deg, var(--green-mid), var(--green-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+#hero p {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  max-width: 480px;
+  margin: 0 auto 2.5rem;
+  line-height: 1.7;
+}
+.store-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .5rem;
+  margin-bottom: 2rem;
+}
+.store-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .35rem .85rem;
+  border-radius: 20px;
+  font-size: .8rem;
+  font-weight: 500;
+  color: #fff;
+  opacity: .9;
+  transition: opacity var(--fast), transform var(--fast);
+  cursor: default;
+}
+.store-pill:hover { opacity: 1; transform: translateY(-1px); }
+.popular-searches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .4rem;
+  margin-top: 1.5rem;
+}
+.popular-searches span {
+  font-size: .75rem;
+  color: var(--text-muted);
+  align-self: center;
+  margin-right: .2rem;
+}
+.ps-chip {
+  padding: .28rem .7rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: .8rem;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all var(--fast);
+  font-family: inherit;
+}
+.ps-chip:hover {
+  background: var(--green-pale);
+  border-color: rgba(21,128,61,.3);
+  color: var(--green-mid);
+}
 
-    /* ── PRICE COMPARISON TABLE ───────────────────── */
-    .price-table { padding: 0.5rem 1.5rem 1.25rem; }
-    .price-row {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.5rem 0.6rem;
-      border-radius: 8px;
-      border-bottom: 1px solid var(--border);
-      transition: background 0.15s;
-    }
-    .price-row:last-child { border-bottom: none; }
-    .price-row.cheapest  { background: var(--green-pale); }
-    .price-row.no-result { opacity: 0.4; }
+/* ── Loading skeleton ──────────────────────────────────────────── */
+#loading { display: none; }
+#loading.visible { display: block; }
+.loading-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.loading-title {
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+.loading-dots span {
+  display: inline-block;
+  width: 5px; height: 5px;
+  background: var(--green-light);
+  border-radius: 50%;
+  margin: 0 2px;
+  animation: bounce-dot .8s var(--ease-in-out) infinite;
+}
+.loading-dots span:nth-child(2) { animation-delay: .15s; }
+.loading-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce-dot {
+  0%,80%,100% { transform: scale(.6); opacity: .4; }
+  40%         { transform: scale(1);  opacity: 1;  }
+}
+.store-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-bottom: 2rem;
+}
+.store-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .3rem .75rem;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 500;
+  color: #fff;
+  opacity: .3;
+  transition: opacity var(--slow) var(--ease);
+}
+.store-status-pill.checking { opacity: .7; animation: checking-pulse 1s ease infinite; }
+.store-status-pill.done     { opacity: 1; }
+.store-status-pill.error    { opacity: .5; }
+@keyframes checking-pulse {
+  0%,100% { opacity: .7; }
+  50%     { opacity: 1;  }
+}
+.skel-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.skel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 1.5rem;
+  overflow: hidden;
+  position: relative;
+}
+.skel-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.08) 50%, transparent 100%);
+  animation: shimmer 1.5s ease infinite;
+}
+[data-theme="dark"] .skel-card::after {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.04) 50%, transparent 100%);
+}
+@keyframes shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.skel-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+.skel-box { background: var(--border); border-radius: var(--r-md); flex-shrink: 0; }
+.skel-text { background: var(--border); border-radius: 4px; }
 
-    .store-icon {
-      width: 32px; height: 32px;
-      border-radius: 7px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.1rem;
-      flex-shrink: 0;
-    }
-    .store-label {
-      min-width: 130px;
-      flex-shrink: 0;
-    }
-    .store-label .en { font-size: 0.88rem; font-weight: 500; }
-    .store-label .ar { font-size: 0.7rem; color: var(--text-muted); }
+/* ── Results bar ───────────────────────────────────────────────── */
+#results-bar { display: none; margin-bottom: 1.25rem; }
+#results-bar.visible { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.results-query { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; }
+.results-meta  { font-size: .82rem; color: var(--text-muted); }
+.results-actions { margin-left: auto; display: flex; align-items: center; gap: .5rem; }
+.sort-select {
+  height: 34px;
+  padding: 0 .8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--fast);
+}
+.sort-select:focus { border-color: var(--green-mid); }
+.action-btn {
+  height: 34px;
+  padding: 0 .85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  transition: all var(--fast);
+  white-space: nowrap;
+}
+.action-btn:hover { border-color: var(--green-mid); color: var(--green-mid); }
 
-    .bar-wrap {
-      flex: 1;
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    .bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      background: var(--green-light);
-      transition: width 0.7s cubic-bezier(0.23,1,0.32,1);
-    }
-    .price-row.cheapest .bar-fill { background: var(--accent); }
+/* ── Store filter ──────────────────────────────────────────────── */
+#store-filter { display: none; margin-bottom: 1.25rem; flex-wrap: wrap; gap: .4rem; }
+#store-filter.visible { display: flex; }
+.sf-btn {
+  height: 32px;
+  padding: 0 .85rem;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: .78rem;
+  cursor: pointer;
+  display: flex; align-items: center; gap: .3rem;
+  transition: all var(--fast);
+}
+.sf-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
+.sf-btn:hover:not(.active) { border-color: var(--green-mid); color: var(--text); }
+.sf-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
 
-    .price-val {
-      min-width: 80px;
-      text-align: right;
-      font-size: 0.92rem;
-      font-weight: 700;
-    }
-    .price-row.cheapest .price-val { color: var(--accent); }
-    .sar { font-size: 0.7rem; font-weight: 400; color: var(--text-muted); }
-    .no-price { font-size: 0.8rem; color: var(--text-muted); min-width: 80px; text-align: right; }
-    .best-tag {
-      font-size: 0.62rem;
-      background: var(--accent);
-      color: #fff;
-      padding: 0.1rem 0.38rem;
-      border-radius: 4px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
+/* ── Product card ──────────────────────────────────────────────── */
+.results-grid { display: flex; flex-direction: column; gap: 1rem; }
 
-    /* ── SAVINGS STRIP ────────────────────────────── */
-    .savings-strip {
-      background: linear-gradient(135deg, #1a7a4a, #26a865);
-      color: #fff;
-      padding: 0.6rem 1.5rem;
-      font-size: 0.82rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+.product-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: box-shadow var(--med) var(--ease), transform var(--med) var(--ease);
+  animation: card-in var(--slow) var(--ease) both;
+}
+.product-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
-    /* ── LOADING STATE ────────────────────────────── */
-    #loading {
-      display: none;
-      text-align: center;
-      padding: 4rem 2rem;
-    }
-    #loading.visible { display: block; }
-    .spinner {
-      width: 48px; height: 48px;
-      border: 4px solid var(--border);
-      border-top-color: var(--green);
-      border-radius: 50%;
-      animation: spin 0.9s linear infinite;
-      margin: 0 auto 1.25rem;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #loading p { color: var(--text-muted); font-size: 0.95rem; }
-    #loading .stores-progress {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 0.5rem;
-      margin-top: 1.5rem;
-    }
-    .store-progress-pill {
-      padding: 0.3rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.78rem;
-      color: #fff;
-      opacity: 0.4;
-      transition: opacity 0.4s;
-    }
-    .store-progress-pill.done { opacity: 1; }
+.card-header {
+  padding: 1.25rem 1.5rem 1rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border-light);
+}
+.card-img-wrap {
+  width: 68px; height: 68px;
+  border-radius: var(--r-md);
+  background: var(--surface-alt);
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.card-img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  transition: transform var(--med) var(--ease);
+}
+.product-card:hover .card-img { transform: scale(1.06); }
+.card-img-placeholder { font-size: 2rem; }
 
-    /* ── ERROR ────────────────────────────────────── */
-    #error-box {
-      display: none;
-      background: #fff5f5;
-      border: 1px solid #fca5a5;
-      border-radius: 12px;
-      padding: 2rem;
-      text-align: center;
-      margin-bottom: 1.5rem;
-    }
-    #error-box.visible { display: block; }
-    #error-box h3 { color: var(--red); margin-bottom: 0.5rem; }
-    #error-box p  { font-size: 0.88rem; color: var(--text-muted); line-height: 1.6; }
-    #error-box code {
-      display: block;
-      background: #fee2e2;
-      border-radius: 8px;
-      padding: 0.75rem;
-      font-size: 0.82rem;
-      margin-top: 0.75rem;
-      text-align: left;
-    }
+.card-info { flex: 1; min-width: 0; }
+.card-name {
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-bottom: .3rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  letter-spacing: -.01em;
+}
+.card-sub { font-size: .78rem; color: var(--text-muted); display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+.card-sub a { color: var(--green-mid); text-decoration: none; }
+.card-sub a:hover { text-decoration: underline; }
 
-    /* ── NO RESULTS ───────────────────────────────── */
-    #no-results {
-      display: none;
-      text-align: center;
-      padding: 3rem;
-      color: var(--text-muted);
-    }
-    #no-results.visible { display: block; }
+.card-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .35rem;
+  flex-shrink: 0;
+}
+.best-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: var(--gold);
+  color: #fff;
+  padding: .25rem .65rem;
+  border-radius: 20px;
+  font-size: .75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(217,119,6,.35);
+}
+.best-price-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: -.03em;
+  white-space: nowrap;
+}
+.best-price-num .sar { font-size: .7rem; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
 
-    /* ── STORE FILTER ─────────────────────────────── */
-    .store-filter {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      margin-bottom: 1.25rem;
-    }
-    .sf-btn {
-      padding: 0.32rem 0.8rem;
-      border-radius: 20px;
-      border: 1px solid var(--border);
-      background: var(--card);
-      font-family: inherit;
-      font-size: 0.78rem;
-      cursor: pointer;
-      color: var(--text-muted);
-      transition: all 0.2s;
-    }
-    .sf-btn.active {
-      background: var(--green);
-      border-color: var(--green);
-      color: #fff;
-    }
-    .sf-btn:hover:not(.active) { border-color: var(--green); color: var(--green); }
-    .sf-btn .dot {
-      display: inline-block;
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      margin-right: 4px;
-    }
+/* ── Price table ───────────────────────────────────────────────── */
+.price-table { padding: .75rem 1.5rem 1rem; }
+.price-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .6rem;
+  border-radius: var(--r-md);
+  border-bottom: 1px solid var(--border-light);
+  transition: background var(--fast);
+}
+.price-row:last-child { border-bottom: none; }
+.price-row:hover { background: var(--surface-alt); }
+.price-row.best  { background: var(--green-pale); }
+.price-row.best:hover { background: var(--green-pale); }
+.price-row.empty { opacity: .38; }
 
-    footer {
-      text-align: center;
-      padding: 2rem;
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      border-top: 1px solid var(--border);
-    }
+.store-icon-wrap {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.price-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.price-row-store { font-size: .85rem; font-weight: 500; color: var(--text-2); }
+.price-row-ar    { font-size: .7rem; color: var(--text-muted); }
+.price-row-bar {
+  width: 100%;
+  max-width: 180px;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 3px;
+}
+.price-row-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green-light);
+  width: 0;
+  transition: width .8s var(--ease);
+}
+.price-row.best .price-row-bar-fill { background: var(--gold); }
 
-    @media (max-width: 600px) {
-      .bar-wrap { display: none; }
-      .store-label { min-width: 100px; }
-    }
+.price-val-wrap { text-align: right; }
+.price-num {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.price-row.best .price-num { color: var(--gold); }
+.price-sar { font-size: .68rem; color: var(--text-muted); font-weight: 400; }
+.price-na  { font-size: .8rem; color: var(--text-faint); }
+
+.best-tag {
+  font-size: .65rem;
+  font-weight: 700;
+  background: var(--gold);
+  color: #fff;
+  padding: .15rem .4rem;
+  border-radius: 4px;
+  white-space: nowrap;
+  margin-left: .35rem;
+}
+
+/* ── Savings strip ─────────────────────────────────────────────── */
+.savings-strip {
+  margin: 0 1rem .75rem;
+  background: linear-gradient(135deg, var(--green), var(--green-mid));
+  border-radius: var(--r-md);
+  padding: .65rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .82rem;
+  color: #fff;
+}
+.savings-strip strong { font-weight: 700; }
+.shop-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: .3rem .75rem;
+  border-radius: var(--r-md);
+  border: 1.5px solid rgba(255,255,255,.4);
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  font-family: inherit;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--fast);
+  display: inline-flex; align-items: center; gap: .3rem;
+}
+.shop-btn:hover { background: rgba(255,255,255,.28); }
+
+/* ── Store coming-in animation ─────────────────────────────────── */
+.store-result-section { animation: card-in var(--slow) var(--ease) both; }
+
+/* ── Error / empty ─────────────────────────────────────────────── */
+#error-box, #no-results {
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  text-align: center;
+  padding: 3.5rem 2rem;
+}
+#error-box.visible, #no-results.visible { display: block; animation: card-in var(--slow) var(--ease); }
+.empty-icon { font-size: 3rem; display: block; margin-bottom: 1rem; }
+#error-box h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; color: var(--red); }
+#no-results h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; }
+.empty-sub { font-size: .9rem; color: var(--text-muted); line-height: 1.65; max-width: 360px; margin: 0 auto; }
+.empty-sub code {
+  display: block; margin-top: .75rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: .6rem 1rem;
+  font-size: .82rem;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+/* ── Cache indicator ───────────────────────────────────────────── */
+.cache-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .2rem .6rem;
+  border-radius: 12px;
+  font-size: .72rem;
+  font-weight: 600;
+  background: var(--gold-pale);
+  color: var(--gold);
+  border: 1px solid rgba(217,119,6,.2);
+}
+
+/* ── Toast ─────────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  pointer-events: none;
+}
+.toast {
+  background: var(--text);
+  color: var(--surface);
+  padding: .65rem 1.25rem;
+  border-radius: var(--r-xl);
+  font-size: .85rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  animation: toast-in .3s var(--ease) both;
+  white-space: nowrap;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(12px) scale(.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast.out { animation: toast-out .25s var(--ease-in) both; }
+@keyframes toast-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(8px) scale(.95); }
+}
+
+/* ── Footer ────────────────────────────────────────────────────── */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+.footer-inner { max-width: 1100px; margin: 0 auto; }
+.footer-logo { font-size: .95rem; font-weight: 700; color: var(--text); margin-bottom: .5rem; }
+.footer-sub { font-size: .78rem; color: var(--text-muted); line-height: 1.7; }
+.footer-links { display: flex; justify-content: center; gap: 1.5rem; margin-top: .75rem; }
+.footer-links a { font-size: .78rem; color: var(--text-muted); text-decoration: none; transition: color var(--fast); }
+.footer-links a:hover { color: var(--green-mid); }
+
+/* ── Keyboard shortcut hint ────────────────────────────────────── */
+.kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .68rem; font-family: inherit;
+  background: rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 5px;
+  padding: .1rem .35rem;
+  color: rgba(255,255,255,.7);
+  margin-left: auto;
+  pointer-events: none;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .header-inner { gap: .75rem; }
+  .logo-text { display: none; }
+  #hero { padding: 3rem 1rem 2.5rem; }
+  #hero h1 { font-size: 1.75rem; }
+  .price-row { grid-template-columns: 32px 1fr auto; }
+  .price-row-bar { display: none; }
+  .card-header { flex-wrap: wrap; }
+  .card-badge { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .results-actions { gap: .35rem; }
+  .sort-select { font-size: .75rem; }
+}
+@media (max-width: 420px) {
+  main { padding: 1.5rem 1rem 4rem; }
+  .card-header { padding: 1rem; }
+  .price-table { padding: .5rem 1rem .75rem; }
+  .savings-strip { margin: 0 .75rem .75rem; }
+}
   </style>
 </head>
 <body>
 
-<header>
+<!-- ── Header ──────────────────────────────────────────────────── -->
+<div id="header">
   <div class="header-inner">
-    <a class="logo" href="/">
-      🛒
-      <div>
-        GroceryCompare SA
-        <span class="logo-sub">Real-time Saudi grocery prices</span>
+    <a class="logo" href="/" title="GroceryCompare SA">
+      <div class="logo-icon">🛒</div>
+      <div class="logo-text">
+        <span class="logo-name">GroceryCompare</span>
+        <span class="logo-tag">Saudi Arabia</span>
       </div>
     </a>
-    <div class="search-wrap">
+
+    <div class="search-wrap" id="searchWrap">
       <input id="searchInput" type="text"
-             placeholder="Search product (e.g. milk, rice, chicken)…"
-             autocomplete="off" />
-      <button class="search-btn" id="searchBtn" title="Search">🔍</button>
+             placeholder="Search any product… (milk, rice, chicken)"
+             autocomplete="off" spellcheck="false" />
+      <button class="search-btn" id="searchBtn" title="Search (Enter)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </div>
+
+    <div class="header-actions">
+      <button class="icon-btn" id="themeBtn" title="Toggle dark mode">🌙</button>
     </div>
   </div>
-</header>
+</div>
 
-<div id="status-bar"></div>
+<!-- ── Status bar ───────────────────────────────────────────────── -->
+<div id="status-bar"><div id="status-bar-inner"></div></div>
 
+<!-- ── Main ─────────────────────────────────────────────────────── -->
 <main>
 
-  <!-- HERO -->
-  <div id="hero">
-    <span class="big-emoji">🧺</span>
-    <h2>Find the Best Grocery Prices in Saudi Arabia</h2>
-    <p>Type any product name and we'll instantly scrape live prices from all major Saudi grocery stores.</p>
-    <div class="store-tags" id="storeTags"></div>
-    <div class="tip">⚡ Powered by real-time web scraping — prices fetched live from each store</div>
-  </div>
+  <!-- Hero -->
+  <section id="hero">
+    <div class="hero-badge"><span class="pulse-dot"></span> Live prices · Updated in real-time</div>
+    <h1>Compare <span class="highlight">Grocery Prices</span><br>Across Saudi Arabia</h1>
+    <p>Instantly search 8 major supermarkets — Noon, Carrefour, Panda, LuLu and more — and find the best price in seconds.</p>
+    <div class="store-grid" id="storeGrid"></div>
+    <div class="popular-searches" id="popularSearches">
+      <span>Try:</span>
+    </div>
+  </section>
 
-  <!-- LOADING -->
+  <!-- Loading -->
   <div id="loading">
-    <div class="spinner"></div>
-    <p id="loading-text">Fetching live prices from all stores…</p>
-    <div class="stores-progress" id="storesProgress"></div>
+    <div class="loading-header">
+      <div class="loading-title">
+        Fetching live prices
+        <span class="loading-dots"><span></span><span></span><span></span></span>
+      </div>
+      <div id="progressCount" style="font-size:.82rem;color:var(--text-muted);margin-left:auto"></div>
+    </div>
+    <div class="store-status-row" id="storeStatusRow"></div>
+    <div class="skel-grid" id="skelGrid"></div>
   </div>
 
-  <!-- ERROR -->
+  <!-- Error -->
   <div id="error-box">
-    <h3>⚠️ Could not connect to the scraper server</h3>
-    <p>Make sure the backend is running on your machine:</p>
-    <code>cd /path/to/project &amp;&amp; node server.js</code>
+    <span class="empty-icon">⚠️</span>
+    <h3>Could not reach the server</h3>
+    <p class="empty-sub">
+      Make sure the backend is running.<br>
+      <code>node server.js</code>
+    </p>
   </div>
 
-  <!-- RESULTS BAR -->
+  <!-- Results bar -->
   <div id="results-bar">
-    <h2 id="results-title"></h2>
-    <span class="results-meta" id="results-meta"></span>
-    <button class="refresh-btn" id="refreshBtn">🔄 Refresh prices</button>
+    <div>
+      <div class="results-query" id="resultsTitle"></div>
+      <div class="results-meta" id="resultsMeta"></div>
+    </div>
+    <div class="results-actions">
+      <select class="sort-select" id="sortSelect">
+        <option value="savings">Sort: Best savings</option>
+        <option value="price_asc">Sort: Lowest price</option>
+        <option value="stores_desc">Sort: Most stores</option>
+      </select>
+      <button class="action-btn" id="refreshBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.75"/></svg>
+        Refresh
+      </button>
+      <button class="action-btn" id="shareBtn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Share
+      </button>
+    </div>
   </div>
 
-  <!-- STORE FILTER -->
-  <div class="store-filter" id="storeFilter" style="display:none;"></div>
+  <!-- Store filter -->
+  <div id="store-filter"></div>
 
-  <!-- RESULTS -->
+  <!-- Results -->
   <div class="results-grid" id="resultsGrid"></div>
 
-  <!-- NO RESULTS -->
+  <!-- No results -->
   <div id="no-results">
-    <span style="font-size:2.5rem">😕</span>
-    <p style="margin-top:0.75rem">No products found for "<span id="noResultsQuery"></span>".<br>Try a different search term.</p>
+    <span class="empty-icon">😕</span>
+    <h3>No products found</h3>
+    <p class="empty-sub">We couldn't find "<span id="noResultsQuery"></span>" in any store.<br>Try a different term — in Arabic or English.</p>
   </div>
 
 </main>
 
 <footer>
-  Prices are scraped live — always verify final price at checkout. &nbsp;|&nbsp; GroceryCompare SA 🇸🇦
+  <div class="footer-inner">
+    <div class="footer-logo">🛒 GroceryCompare SA</div>
+    <p class="footer-sub">
+      Prices are scraped live from each store's website.<br>
+      Always verify the final price at checkout. &nbsp;🇸🇦
+    </p>
+    <div class="footer-links">
+      <a href="#" onclick="return false">About</a>
+      <a href="#" onclick="return false">How it works</a>
+      <a href="#" onclick="return false">Privacy</a>
+    </div>
+  </div>
 </footer>
 
+<!-- Toast container -->
+<div id="toast-container"></div>
+
 <script>
-/* ═══════════════════════════════════════════════════════
-   STORE DEFINITIONS (mirrors server.js)
-═══════════════════════════════════════════════════════ */
+'use strict';
+/* ════════════════════════════════════════════════════════════════
+   STORE DEFINITIONS
+════════════════════════════════════════════════════════════════ */
 const STORES = [
-  { id: 'noon',      name: 'Noon Daily',        ar: 'نون',     emoji: '⚫', color: '#f9a825' },
-  { id: 'carrefour', name: 'Carrefour',          ar: 'كارفور', emoji: '🔴', color: '#003087' },
-  { id: 'panda',     name: 'Panda',              ar: 'بنده',   emoji: '🐼', color: '#e63946' },
-  { id: 'danube',    name: 'Danube',             ar: 'دانوب', emoji: '🔵', color: '#1d3557' },
-  { id: 'lulu',      name: 'LuLu Hypermarket',   ar: 'لولو',  emoji: '🟢', color: '#2a9d8f' },
-  { id: 'tamimi',    name: 'Tamimi Markets',     ar: 'التميمي', emoji: '🏪', color: '#457b9d' },
-  { id: 'othaim',    name: 'Othaim',             ar: 'العثيم', emoji: '🟡', color: '#f4a261' },
-  { id: 'bindawood', name: 'Bin Dawood',         ar: 'بن داود', emoji: '🟠', color: '#e76f51' },
+  { id: 'noon',      name: 'Noon Daily',       ar: 'نون',      emoji: '⚫', color: '#1a1a2e' },
+  { id: 'carrefour', name: 'Carrefour',         ar: 'كارفور',  emoji: '🔴', color: '#003087' },
+  { id: 'panda',     name: 'Panda',             ar: 'بنده',    emoji: '🐼', color: '#c62828' },
+  { id: 'danube',    name: 'Danube',            ar: 'دانوب',  emoji: '🔵', color: '#1565c0' },
+  { id: 'lulu',      name: 'LuLu Hypermarket',  ar: 'لولو',   emoji: '🟢', color: '#1b5e20' },
+  { id: 'tamimi',    name: 'Tamimi Markets',    ar: 'التميمي', emoji: '🏪', color: '#37474f' },
+  { id: 'othaim',    name: 'Othaim',            ar: 'العثيم',  emoji: '🟡', color: '#e65100' },
+  { id: 'bindawood', name: 'Bin Dawood',        ar: 'بن داود', emoji: '🟠', color: '#bf360c' },
 ];
+const STORE_MAP = Object.fromEntries(STORES.map(s => [s.id, s]));
+const POPULAR   = ['حليب', 'أرز', 'خبز', 'بيض', 'زيت', 'milk', 'rice', 'eggs', 'water', 'chicken'];
+const RECENT_KEY = 'gc_recent_v1';
 
-const API = '/api';
-
-/* ═══════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════
    STATE
-═══════════════════════════════════════════════════════ */
+════════════════════════════════════════════════════════════════ */
 let lastData          = null;
 let currentQuery      = '';
-let activeStoreFilter = 'all';
+let activeFilter      = 'all';
+let currentSort       = 'savings';
+let dropdownOpen      = false;
 
-/* ═══════════════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════════════ */
-function storeById(id) { return STORES.find(s => s.id === id); }
+/* ════════════════════════════════════════════════════════════════
+   DOM HELPERS
+════════════════════════════════════════════════════════════════ */
+const $  = id => document.getElementById(id);
+const show = id => $(id).classList.add('visible');
+const hide = id => $(id).classList.remove('visible');
 
-function show(id)  { document.getElementById(id).classList.add('visible'); }
-function hide(id)  { document.getElementById(id).classList.remove('visible'); }
-function el(id)    { return document.getElementById(id); }
-
-function setStatus(msg) {
-  el('status-bar').textContent = msg;
-  el('status-bar').classList.toggle('visible', !!msg);
+function sanitize(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = String(str);
+  return d.innerHTML;
 }
 
-/* ═══════════════════════════════════════════════════════
-   HERO STORE TAGS
-═══════════════════════════════════════════════════════ */
-el('storeTags').innerHTML = STORES.map(s =>
-  `<span class="store-tag" style="background:${s.color}">${s.emoji} ${s.name}</span>`
+function setStatus(msg, type = '') {
+  const bar = $('status-bar');
+  bar.className = type ? `visible ${type}` : msg ? 'visible' : '';
+  $('status-bar-inner').textContent = msg || '';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════════════════════ */
+function toast(msg, duration = 2500) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  $('toast-container').appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    el.addEventListener('animationend', () => el.remove());
+  }, duration);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DARK MODE
+════════════════════════════════════════════════════════════════ */
+const savedTheme = localStorage.getItem('gc_theme') ||
+  (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+applyTheme(savedTheme);
+
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  $('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+  localStorage.setItem('gc_theme', t);
+}
+$('themeBtn').addEventListener('click', () => {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+});
+
+/* ════════════════════════════════════════════════════════════════
+   RECENT SEARCHES
+════════════════════════════════════════════════════════════════ */
+function getRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); }
+  catch { return []; }
+}
+function addRecent(q) {
+  const list = [q, ...getRecent().filter(x => x !== q)].slice(0, 8);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SEARCH DROPDOWN
+════════════════════════════════════════════════════════════════ */
+function buildDropdown(filter = '') {
+  const dd = $('searchDropdown');
+  const recent  = getRecent().filter(x => !filter || x.toLowerCase().includes(filter.toLowerCase()));
+  const popular = POPULAR.filter(x => !filter || x.toLowerCase().includes(filter.toLowerCase()));
+
+  let html = '';
+  if (recent.length) {
+    html += `<div class="dropdown-section"><div class="dropdown-label">Recent</div>`;
+    recent.slice(0, 5).forEach(r => {
+      html += `<div class="dropdown-item" data-q="${sanitize(r)}">
+                 <span class="di-icon">🕐</span>${sanitize(r)}
+               </div>`;
+    });
+    html += `</div><div class="dropdown-divider"></div>`;
+  }
+  if (popular.length && !filter) {
+    html += `<div class="dropdown-section"><div class="dropdown-label">Popular</div>`;
+    popular.slice(0, 5).forEach(p => {
+      html += `<div class="dropdown-item" data-q="${sanitize(p)}">
+                 <span class="di-icon">🔥</span>${sanitize(p)}
+               </div>`;
+    });
+    html += `</div>`;
+  }
+
+  dd.innerHTML = html || `<div class="dropdown-section"><div class="dropdown-item" style="color:var(--text-muted);cursor:default"><span class="di-icon">🔍</span>No suggestions</div></div>`;
+  dd.querySelectorAll('.dropdown-item[data-q]').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      $('searchInput').value = item.dataset.q;
+      closeDropdown();
+      doSearch(item.dataset.q);
+    });
+  });
+}
+
+function openDropdown() {
+  buildDropdown($('searchInput').value);
+  $('searchDropdown').classList.add('open');
+  dropdownOpen = true;
+}
+function closeDropdown() {
+  $('searchDropdown').classList.remove('open');
+  dropdownOpen = false;
+}
+
+$('searchInput').addEventListener('focus', openDropdown);
+$('searchInput').addEventListener('input', () => {
+  if (!dropdownOpen) openDropdown();
+  buildDropdown($('searchInput').value);
+});
+$('searchInput').addEventListener('blur', () => setTimeout(closeDropdown, 150));
+$('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { closeDropdown(); doSearch($('searchInput').value); }
+  if (e.key === 'Escape') closeDropdown();
+});
+$('searchBtn').addEventListener('click', () => doSearch($('searchInput').value));
+
+// Keyboard shortcut: / or Ctrl+K to focus search
+document.addEventListener('keydown', e => {
+  if ((e.key === '/' || (e.key === 'k' && (e.ctrlKey || e.metaKey))) && document.activeElement !== $('searchInput')) {
+    e.preventDefault();
+    $('searchInput').focus();
+    $('searchInput').select();
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════
+   HERO POPULATION
+════════════════════════════════════════════════════════════════ */
+$('storeGrid').innerHTML = STORES.map(s =>
+  `<span class="store-pill" style="background:${s.color}">${s.emoji} ${sanitize(s.name)}</span>`
 ).join('');
 
-/* ═══════════════════════════════════════════════════════
-   SEARCH
-═══════════════════════════════════════════════════════ */
-async function search(query) {
-  if (!query.trim()) return;
-  currentQuery = query.trim();
+$('popularSearches').innerHTML = `<span>Try:</span>` +
+  POPULAR.slice(0, 8).map(p => `<button class="ps-chip">${sanitize(p)}</button>`).join('');
+$('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $('searchInput').value = btn.textContent;
+    doSearch(btn.textContent);
+  });
+});
 
-  // Switch UI to loading state
-  el('hero').style.display   = 'none';
-  el('loading').style.display = 'block';
+/* ════════════════════════════════════════════════════════════════
+   SEARCH
+════════════════════════════════════════════════════════════════ */
+async function doSearch(rawQuery) {
+  const query = rawQuery.trim();
+  if (!query) return;
+  currentQuery = query;
+  addRecent(query);
+  activeFilter = 'all';
+
+  // --- UI: enter loading state ---
+  $('hero').style.display          = 'none';
+  $('loading').style.display       = 'block';
+  $('resultsGrid').innerHTML       = '';
+  $('store-filter').innerHTML      = '';
   hide('results-bar');
   hide('no-results');
   hide('error-box');
-  el('storeFilter').style.display = 'none';
-  el('resultsGrid').innerHTML = '';
+  $('store-filter').classList.remove('visible');
+  setStatus('');
 
-  // Animate store pills
-  el('storesProgress').innerHTML = STORES.map(s =>
-    `<span class="store-progress-pill" id="pill-${s.id}" style="background:${s.color}">${s.emoji} ${s.name}</span>`
+  // Skeleton cards
+  $('skelGrid').innerHTML = [1,2,3].map(() => `
+    <div class="skel-card">
+      <div class="skel-row">
+        <div class="skel-box" style="width:68px;height:68px"></div>
+        <div style="flex:1">
+          <div class="skel-text" style="height:16px;width:70%;margin-bottom:8px"></div>
+          <div class="skel-text" style="height:12px;width:45%"></div>
+        </div>
+        <div class="skel-box" style="width:80px;height:36px;border-radius:20px"></div>
+      </div>
+      ${[1,2,3,4].map(() => `
+      <div class="skel-row" style="margin-bottom:.5rem">
+        <div class="skel-box" style="width:36px;height:36px"></div>
+        <div style="flex:1">
+          <div class="skel-text" style="height:12px;width:60%;margin-bottom:6px"></div>
+          <div class="skel-text" style="height:5px;width:80%"></div>
+        </div>
+        <div class="skel-text" style="width:60px;height:16px"></div>
+      </div>`).join('')}
+    </div>`).join('');
+
+  // Store status pills
+  $('storeStatusRow').innerHTML = STORES.map(s =>
+    `<span class="store-status-pill" id="sspill-${s.id}" style="background:${s.color}">${s.emoji} ${sanitize(s.name)}</span>`
   ).join('');
-
-  // Fake progressive reveal (server does it all at once but UX feels better)
-  const revealTimer = setInterval(() => {
-    const pending = [...document.querySelectorAll('.store-progress-pill:not(.done)')];
-    if (pending.length) pending[0].classList.add('done');
-  }, 600);
+  // Fake progressive pill reveal (UX animation)
+  let pillIdx = 0;
+  const pillTimer = setInterval(() => {
+    const pills = document.querySelectorAll('.store-status-pill:not(.checking):not(.done):not(.error)');
+    if (pillIdx < STORES.length && pills.length) {
+      pills[0].classList.add('checking');
+      pillIdx++;
+    } else { clearInterval(pillTimer); }
+  }, 800);
 
   try {
-    const res = await fetch(`${API}/search?q=${encodeURIComponent(currentQuery)}`);
-    clearInterval(revealTimer);
+    const t0  = performance.now();
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+    clearInterval(pillTimer);
 
-    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    lastData = data;
+    const ms   = Math.round(performance.now() - t0);
+    lastData   = data;
 
-    renderResults(data);
+    // Mark all pills done
+    document.querySelectorAll('.store-status-pill').forEach(p => {
+      p.classList.remove('checking');
+      p.classList.add('done');
+    });
+
+    setTimeout(() => renderResults(data, ms), 300);
   } catch (err) {
-    clearInterval(revealTimer);
-    el('loading').style.display = 'none';
+    clearInterval(pillTimer);
+    $('loading').style.display = 'none';
     show('error-box');
-    console.error(err);
+    setStatus('⚠️ ' + err.message, 'error');
   }
 }
 
-/* ═══════════════════════════════════════════════════════
+/* ════════════════════════════════════════════════════════════════
    RENDER RESULTS
-═══════════════════════════════════════════════════════ */
-function renderResults(data) {
-  el('loading').style.display = 'none';
+════════════════════════════════════════════════════════════════ */
+function sortStoreProducts(storesWithProducts) {
+  const sorted = [...storesWithProducts];
+  if (currentSort === 'price_asc') {
+    sorted.sort((a, b) => {
+      const pa = a.products[0]?.price || Infinity;
+      const pb = b.products[0]?.price || Infinity;
+      return pa - pb;
+    });
+  } else if (currentSort === 'stores_desc') {
+    sorted.sort((a, b) => b.products.length - a.products.length);
+  } else { // savings: highest savings first (max - min within store context; use per-product)
+    // Already sorted by cheapest product overall
+    sorted.sort((a, b) => {
+      const pa = a.products[0]?.price || Infinity;
+      const pb = b.products[0]?.price || Infinity;
+      return pa - pb;
+    });
+  }
+  return sorted;
+}
 
-  const storesWithProducts = data.stores.filter(s => s.products.length > 0);
+function renderResults(data, ms) {
+  $('loading').style.display = 'none';
+
+  const storesWithProducts = data.stores.filter(s => s.products && s.products.length > 0);
+  const totalProducts      = data.stores.reduce((n, s) => n + (s.products?.length || 0), 0);
+  const errors             = data.stores.filter(s => s.error && !s.products?.length);
 
   if (!storesWithProducts.length) {
     show('no-results');
-    el('noResultsQuery').textContent = data.query;
+    $('noResultsQuery').textContent = data.query;
     return;
   }
 
   // Results bar
   show('results-bar');
-  el('results-title').textContent = `"${data.query}"`;
-  const total = storesWithProducts.reduce((a, s) => a + s.products.length, 0);
-  el('results-meta').textContent =
-    `${total} products found across ${storesWithProducts.length} stores · ${new Date(data.timestamp).toLocaleTimeString()}`;
+  $('resultsTitle').innerHTML = `Results for <em style="font-style:normal">"${sanitize(data.query)}"</em>`;
+  let meta = `${totalProducts} products · ${storesWithProducts.length} of ${STORES.length} stores`;
+  if (ms) meta += ` · ${ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's'}`;
+  if (data.cached) meta += ` <span class="cache-badge">⚡ cached</span>`;
+  $('resultsMeta').innerHTML = meta;
 
   // Store filter bar
-  const filterBar = el('storeFilter');
-  filterBar.style.display = 'flex';
-  filterBar.innerHTML = `
-    <button class="sf-btn ${activeStoreFilter === 'all' ? 'active' : ''}" data-store="all">All stores</button>
+  const sf = $('store-filter');
+  sf.classList.add('visible');
+  sf.innerHTML = `
+    <button class="sf-btn ${activeFilter === 'all' ? 'active' : ''}" data-store="all">All stores</button>
     ${storesWithProducts.map(s =>
-      `<button class="sf-btn ${activeStoreFilter === s.id ? 'active' : ''}" data-store="${s.id}">
-        <span class="dot" style="background:${s.color}"></span>${s.name}
+      `<button class="sf-btn ${activeFilter === s.id ? 'active' : ''}" data-store="${s.id}">
+        <span class="dot" style="background:${s.color}"></span>${sanitize(s.name)}
       </button>`
     ).join('')}`;
-  filterBar.querySelectorAll('.sf-btn').forEach(btn => {
+  sf.querySelectorAll('.sf-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      activeStoreFilter = btn.dataset.store;
-      renderResults(lastData);
+      activeFilter = btn.dataset.store;
+      renderResults(lastData, 0);
     });
   });
 
-  // Build per-product comparison rows
-  // Collect unique product names by matching across stores
-  const grid = el('resultsGrid');
+  // Filter stores
+  const filtered = activeFilter === 'all'
+    ? storesWithProducts
+    : storesWithProducts.filter(s => s.id === activeFilter);
+
+  const sorted   = sortStoreProducts(filtered);
+
+  // All prices for normalisation
+  const allPrices = sorted.flatMap(s => s.products.map(p => p.price)).filter(Boolean);
+  const globalMin = allPrices.length ? Math.min(...allPrices) : 0;
+  const globalMax = allPrices.length ? Math.max(...allPrices) : 1;
+
+  // Build comparison card: each "slot" is a product index
+  const maxSlots = Math.min(Math.max(...data.stores.map(s => s.products?.length || 0)), 5);
+  const grid = $('resultsGrid');
   grid.innerHTML = '';
 
-  // Group: for each store's top product, build a comparison card
-  // Strategy: take top-1 product per store, find the cheapest across all stores
-  const topProducts = data.stores
-    .filter(s => s.products.length > 0)
-    .map(s => ({
-      store:   s,
-      product: s.products[0],
-    }));
+  for (let slot = 0; slot < maxSlots; slot++) {
+    const storeProducts = sorted
+      .filter(s => s.products[slot])
+      .map(s => ({ store: s, product: s.products[slot] }));
+    if (!storeProducts.length) continue;
 
-  if (!topProducts.length) { show('no-results'); el('noResultsQuery').textContent = data.query; return; }
+    const prices   = storeProducts.map(sp => sp.product.price).filter(Boolean);
+    if (!prices.length) continue;
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const cheapest = storeProducts.find(sp => sp.product.price === minPrice);
+    const pRange   = maxPrice - minPrice || 1;
+    const savings  = (maxPrice - minPrice).toFixed(2);
 
-  // Show one comparison card at the top (best match across all stores)
-  const mainCard = buildComparisonCard(data.query, topProducts);
-  grid.appendChild(mainCard);
+    const repProduct = cheapest.product;
+    const repStore   = cheapest.store;
 
-  // Additional product cards (different products from same stores)
-  const maxExtra = Math.max(...data.stores.map(s => s.products.length));
-  for (let i = 1; i < Math.min(maxExtra, 5); i++) {
-    const extraProducts = data.stores
-      .filter(s => s.products[i])
-      .map(s => ({ store: s, product: s.products[i] }));
-    if (extraProducts.length >= 1) {
-      const card = buildComparisonCard(`${data.query} — variant ${i + 1}`, extraProducts);
-      grid.appendChild(card);
-    }
-  }
+    // Product image
+    const imgHtml = repProduct.image
+      ? `<img class="card-img" src="${sanitize(repProduct.image)}" alt="" loading="lazy"
+            onerror="this.parentElement.innerHTML='<span class=card-img-placeholder>🛒</span>'">`
+      : `<span class="card-img-placeholder">🛒</span>`;
 
-  // Show store errors in status bar
-  const errors = data.stores.filter(s => s.error);
-  if (errors.length) {
-    setStatus(`⚠️ Could not fetch from: ${errors.map(s => s.name).join(', ')} (site may be blocking scrapers)`);
-  } else {
-    setStatus('');
-  }
-}
+    // View link
+    const viewHtml = repProduct.url
+      ? `<a href="${sanitize(repProduct.url)}" target="_blank" rel="noopener noreferrer">View at ${sanitize(repStore.name)} →</a>`
+      : `<span>Cheapest at ${sanitize(repStore.name)}</span>`;
 
-function buildComparisonCard(title, storeProducts) {
-  // storeProducts: [{ store, product }]
-  const prices = storeProducts.map(sp => sp.product.price).filter(Boolean);
-  if (!prices.length) return document.createElement('div');
+    // Price rows (sorted cheapest first)
+    const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
+    const priceRows = rowsSorted.map((sp, i) => {
+      const isBest  = sp.product.price === minPrice;
+      const barPct  = 100 - ((sp.product.price - minPrice) / pRange) * 80;
+      return `
+        <div class="price-row ${isBest ? 'best' : ''}">
+          <div class="store-icon-wrap" style="background:${sp.store.color}18; color:${sp.store.color}">
+            ${sp.store.emoji}
+          </div>
+          <div class="price-row-info">
+            <div class="price-row-store">${sanitize(sp.store.name)}</div>
+            <div class="price-row-ar">${sanitize(sp.store.ar)}</div>
+            <div class="price-row-bar">
+              <div class="price-row-bar-fill" data-w="${Math.max(barPct, 6)}"></div>
+            </div>
+          </div>
+          <div class="price-val-wrap">
+            <div class="price-num">${sp.product.price.toFixed(2)}<span class="price-sar"> SAR</span>${isBest ? '<span class="best-tag">BEST</span>' : ''}</div>
+          </div>
+        </div>`;
+    }).join('');
 
-  const minPrice   = Math.min(...prices);
-  const maxPrice   = Math.max(...prices);
-  const priceRange = maxPrice - minPrice || 1;
-  const cheapest   = storeProducts.find(sp => sp.product.price === minPrice);
-  const savings    = (maxPrice - minPrice).toFixed(2);
+    // Stores with no result for this slot
+    const missingIds  = STORES.map(s => s.id).filter(id => !storeProducts.find(sp => sp.store.id === id));
+    const missingRows = missingIds.map(id => {
+      const s = STORE_MAP[id];
+      return `
+        <div class="price-row empty">
+          <div class="store-icon-wrap" style="background:#e2e8f0; color:#94a3b8">${s.emoji}</div>
+          <div class="price-row-info">
+            <div class="price-row-store">${sanitize(s.name)}</div>
+            <div class="price-row-ar">${sanitize(s.ar)}</div>
+          </div>
+          <div class="price-val-wrap"><span class="price-na">—</span></div>
+        </div>`;
+    }).join('');
 
-  // Representative product (cheapest store's product)
-  const repProduct = cheapest.product;
+    // Savings strip
+    const savingsHtml = parseFloat(savings) > 0.05
+      ? `<div class="savings-strip">
+           💰 Save <strong> ${savings} SAR</strong> vs most expensive
+           ${repProduct.url ? `<a class="shop-btn" href="${sanitize(repProduct.url)}" target="_blank" rel="noopener">Shop now →</a>` : ''}
+         </div>`
+      : '';
 
-  // Sort by price ascending
-  const sorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
-
-  const imgHtml = repProduct.image
-    ? `<img class="product-img" src="${repProduct.image}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-       <div class="product-img-placeholder" style="display:none">🛒</div>`
-    : `<div class="product-img-placeholder">🛒</div>`;
-
-  const urlHtml = repProduct.url
-    ? `<a href="${repProduct.url}" target="_blank" rel="noopener">View at ${cheapest.store.name} →</a>`
-    : '';
-
-  const priceRows = sorted.map(sp => {
-    const isCheap = sp.product.price === minPrice;
-    const barFill = 100 - ((sp.product.price - minPrice) / priceRange) * 100;
-    return `
-      <div class="price-row ${isCheap ? 'cheapest' : ''}">
-        <div class="store-icon" style="background:${sp.store.color}22; color:${sp.store.color}">${sp.store.emoji}</div>
-        <div class="store-label">
-          <div class="en">${sp.store.name}</div>
-          <div class="ar">${sp.store.ar}</div>
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.style.animationDelay = `${slot * 80}ms`;
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-img-wrap">${imgHtml}</div>
+        <div class="card-info">
+          <div class="card-name">${sanitize(repProduct.name || 'Product')}</div>
+          <div class="card-sub">${viewHtml}</div>
         </div>
-        <div class="bar-wrap"><div class="bar-fill" style="width:${Math.max(barFill,6)}%"></div></div>
-        <div class="price-val">${sp.product.price.toFixed(2)}<span class="sar"> SAR</span></div>
-        ${isCheap ? '<span class="best-tag">BEST</span>' : ''}
-      </div>`;
-  }).join('');
-
-  // Stores with no result
-  const missingStores = STORES.filter(s => !storeProducts.find(sp => sp.store.id === s.id));
-  const missingRows = missingStores.map(s => `
-    <div class="price-row no-result">
-      <div class="store-icon" style="background:#f0f0f0; color:#aaa">${s.emoji}</div>
-      <div class="store-label"><div class="en">${s.name}</div><div class="ar">${s.ar}</div></div>
-      <div class="bar-wrap"><div class="bar-fill" style="width:0"></div></div>
-      <div class="no-price">—</div>
-    </div>`).join('');
-
-  const savingsHtml = parseFloat(savings) > 0.01
-    ? `<div class="savings-strip">
-         💰 Save up to <strong>&nbsp;${savings} SAR&nbsp;</strong> by shopping at ${cheapest.store.name}
-         instead of the most expensive option.
-       </div>`
-    : '';
-
-  const div = document.createElement('div');
-  div.className = 'product-card';
-  div.innerHTML = `
-    <div class="product-header">
-      ${imgHtml}
-      <div class="product-info">
-        <div class="product-name">${repProduct.name}</div>
-        <div class="product-source">${urlHtml}</div>
+        <div class="card-badge">
+          <div class="best-badge">👑 Best price</div>
+          <div class="best-price-num">${minPrice.toFixed(2)}<span class="sar"> SAR</span></div>
+        </div>
       </div>
-      <div class="best-price-badge">From ${minPrice.toFixed(2)} SAR</div>
-    </div>
-    <div class="price-table">
-      ${priceRows}
-      ${missingRows}
-    </div>
-    ${savingsHtml}`;
-  return div;
+      <div class="price-table">
+        ${priceRows}
+        ${missingRows}
+      </div>
+      ${savingsHtml}`;
+
+    grid.appendChild(card);
+  }
+
+  // Animate bars after DOM paint
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.price-row-bar-fill[data-w]').forEach(el => {
+        el.style.width = el.dataset.w + '%';
+      });
+    });
+  });
+
+  // Errors in status bar
+  if (errors.length) {
+    setStatus(`⚠️ Couldn't fetch from: ${errors.map(s => s.name).join(', ')} — sites may be blocking scrapers`, 'warning');
+  }
 }
 
-/* ═══════════════════════════════════════════════════════
-   EVENTS
-═══════════════════════════════════════════════════════ */
-el('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') search(el('searchInput').value);
-});
-el('searchBtn').addEventListener('click', () => search(el('searchInput').value));
-
-el('refreshBtn').addEventListener('click', () => {
-  if (currentQuery) search(currentQuery);
+/* ════════════════════════════════════════════════════════════════
+   CONTROLS
+════════════════════════════════════════════════════════════════ */
+$('sortSelect').addEventListener('change', e => {
+  currentSort = e.target.value;
+  if (lastData) renderResults(lastData, 0);
 });
 
-/* ═══════════════════════════════════════════════════════
-   HEALTH CHECK on load
-═══════════════════════════════════════════════════════ */
-(async () => {
-  try {
-    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(3000) });
-    if (r.ok) setStatus('✅ Connected to scraper server — ready to search!');
-  } catch (_) {
-    setStatus('⚠️ Scraper server not running. Start it with: node server.js');
+$('refreshBtn').addEventListener('click', () => {
+  if (currentQuery) doSearch(currentQuery);
+});
+
+$('shareBtn').addEventListener('click', async () => {
+  const url = `${location.origin}/?q=${encodeURIComponent(currentQuery)}`;
+  if (navigator.share) {
+    try { await navigator.share({ title: `GroceryCompare: ${currentQuery}`, url }); }
+    catch (_) {}
+  } else {
+    await navigator.clipboard.writeText(url).catch(() => {});
+    toast('Link copied to clipboard!');
   }
-})();
+});
+
+/* ════════════════════════════════════════════════════════════════
+   AUTO-SEARCH FROM URL (?q=...)
+════════════════════════════════════════════════════════════════ */
+const urlQ = new URLSearchParams(location.search).get('q');
+if (urlQ) {
+  $('searchInput').value = urlQ;
+  doSearch(urlQ);
+} else {
+  // Health check
+  fetch('/api/health', { signal: AbortSignal.timeout(4000) })
+    .then(r => r.ok && setStatus('✅ Connected — ready to compare prices', 'success'))
+    .catch(() => setStatus('⚠️ Scraper server not running', 'error'));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   UPDATE URL ON SEARCH
+════════════════════════════════════════════════════════════════ */
+const _orig = doSearch;
+// Shadow doSearch to update URL
+window.doSearch = async function(q) {
+  if (q.trim()) history.replaceState(null, '', `?q=${encodeURIComponent(q.trim())}`);
+  return _orig(q);
+};
+// Rebind events to use patched version
+$('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { closeDropdown(); window.doSearch($('searchInput').value); }
+});
+$('searchBtn').addEventListener('click', () => window.doSearch($('searchInput').value));
+$('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
+  btn.onclick = () => {
+    $('searchInput').value = btn.textContent;
+    window.doSearch(btn.textContent);
+  };
+});
 </script>
 </body>
 </html>

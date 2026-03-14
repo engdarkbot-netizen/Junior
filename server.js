@@ -12,13 +12,35 @@
  *   PROXY_PASS    - Proxy password
  */
 
-const express = require('express');
-const cors    = require('cors');
-const path    = require('path');
+const express    = require('express');
+const cors       = require('cors');
+const path       = require('path');
+const zlib       = require('zlib');
 const { chromium } = require('playwright');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+/* ─── Compression middleware (gzip/deflate) ────────────────────── */
+app.use((req, res, next) => {
+  const ae = req.headers['accept-encoding'] || '';
+  if (!ae.includes('gzip')) return next();
+  const _json = res.json.bind(res);
+  res.json = (data) => {
+    const body = JSON.stringify(data);
+    zlib.gzip(Buffer.from(body), (err, buf) => {
+      if (err) return _json(data);
+      res.setHeader('Content-Encoding', 'gzip');
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Length', buf.length);
+      res.end(buf);
+    });
+  };
+  next();
+});
+
+/* ─── Trust Railway/Render proxy for IP detection ─────────────── */
+app.set('trust proxy', 1);
 
 /* ─── Proxy config (optional) ──────────────────────────────────── */
 const PROXY_URL  = process.env.PROXY_URL  || null;
@@ -27,6 +49,78 @@ const PROXY_PASS = process.env.PROXY_PASS || null;
 
 app.use(cors());
 app.use(express.static(path.join(__dirname)));
+
+/* ─── In-memory search cache (5-minute TTL, max 150 entries) ───── */
+const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_MAX = 150;
+const searchCache = new Map(); // key -> { data, ts }
+
+function cacheGet(key) {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > CACHE_TTL) { searchCache.delete(key); return null; }
+  return entry;
+}
+function cacheSet(key, data) {
+  if (searchCache.size >= CACHE_MAX) {
+    // Evict oldest entry
+    const oldestKey = searchCache.keys().next().value;
+    searchCache.delete(oldestKey);
+  }
+  searchCache.set(key, { data, ts: Date.now() });
+}
+
+/* ─── In-flight request deduplication ─────────────────────────── */
+const inflight = new Map(); // key -> Promise
+
+/* ─── Simple per-IP rate limiter (20 req/min) ──────────────────── */
+const RATE_LIMIT   = 20;
+const RATE_WINDOW  = 60 * 1000;
+const rateLimitMap = new Map(); // ip -> { count, resetAt }
+
+// Clean up stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap) {
+    if (now > entry.resetAt) rateLimitMap.delete(ip);
+  }
+}, 5 * 60 * 1000);
+
+function rateLimit(req, res, next) {
+  const ip  = req.ip || req.socket?.remoteAddress || 'unknown';
+  const now = Date.now();
+  let entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_WINDOW };
+  }
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+
+  res.setHeader('X-RateLimit-Limit',     String(RATE_LIMIT));
+  res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_LIMIT - entry.count)));
+  res.setHeader('X-RateLimit-Reset',     new Date(entry.resetAt).toISOString());
+
+  if (entry.count > RATE_LIMIT) {
+    return res.status(429).json({
+      error: 'Too many requests — please wait a moment before searching again.',
+      retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+    });
+  }
+  next();
+}
+
+/* ─── Timing middleware ────────────────────────────────────────── */
+app.use((req, res, next) => {
+  req._startAt = process.hrtime.bigint();
+  res.on('finish', () => {
+    const ms = Number(process.hrtime.bigint() - req._startAt) / 1e6;
+    if (req.path.startsWith('/api/')) {
+      console.log(`[${res.statusCode}] ${req.method} ${req.path}${req.query.q ? `?q=${req.query.q}` : ''} ${ms.toFixed(0)}ms`);
+    }
+  });
+  next();
+});
 
 /* ─── Browser pool ─────────────────────────────────────────────── */
 let browserInstance = null;
@@ -355,42 +449,114 @@ async function scrapeStore(store, query) {
   return result;
 }
 
-/* ─── API endpoint ─────────────────────────────────────────────── */
-app.get('/api/search', async (req, res) => {
+/* ─── Shared scrape runner (used by both endpoints) ────────────── */
+async function runScrape(query) {
+  const storeResults = [];
+  for (let i = 0; i < STORES.length; i += 2) {
+    const batch = STORES.slice(i, i + 2);
+    const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
+    storeResults.push(...batchResults);
+  }
+  return {
+    query,
+    timestamp: new Date().toISOString(),
+    stores: storeResults.map(sr => ({
+      id:       sr.storeId,
+      name:     sr.storeName,
+      ar:       sr.storeAr,
+      emoji:    sr.storeEmoji,
+      color:    sr.storeColor,
+      products: sr.products,
+      error:    sr.error,
+    })),
+  };
+}
+
+/* ─── GET /api/search — cached, deduplicated ───────────────────── */
+app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
 
+  const key = query.toLowerCase();
+
+  // Cache hit
+  const hit = cacheGet(key);
+  if (hit) {
+    const age = Math.floor((Date.now() - hit.ts) / 1000);
+    res.setHeader('X-Cache',     'HIT');
+    res.setHeader('X-Cache-Age', `${age}s`);
+    return res.json({ ...hit.data, cached: true, cacheAge: age });
+  }
+
+  // In-flight dedup
+  if (inflight.has(key)) {
+    console.log(`[search] "${query}" — dedup`);
+    res.setHeader('X-Cache', 'DEDUP');
+    const data = await inflight.get(key);
+    return res.json(data);
+  }
+
+  // Fresh scrape
   console.log(`[search] "${query}"`);
+  res.setHeader('X-Cache', 'MISS');
+
+  const promise = runScrape(query).finally(() => inflight.delete(key));
+  inflight.set(key, promise);
 
   try {
-    // Scrape stores with limited concurrency (2 at a time) to avoid browser crashes
-    const storeResults = [];
-    for (let i = 0; i < STORES.length; i += 2) {
-      const batch = STORES.slice(i, i + 2);
-      const batchResults = await Promise.all(batch.map(store => scrapeStore(store, query)));
-      storeResults.push(...batchResults);
-    }
-
-    // Build unified product list: for each store, take top match
-    const response = {
-      query,
-      timestamp: new Date().toISOString(),
-      stores: storeResults.map(sr => ({
-        id:      sr.storeId,
-        name:    sr.storeName,
-        ar:      sr.storeAr,
-        emoji:   sr.storeEmoji,
-        color:   sr.storeColor,
-        products: sr.products,
-        error:   sr.error,
-      })),
-    };
-
-    res.json(response);
+    const data = await promise;
+    cacheSet(key, data);
+    res.json(data);
   } catch (err) {
-    console.error(err);
+    console.error('[search error]', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+/* ─── GET /api/search/stream — Server-Sent Events ──────────────── */
+app.get('/api/search/stream', rateLimit, async (req, res) => {
+  const query = (req.query.q || '').trim();
+  if (!query) return res.status(400).end();
+
+  res.setHeader('Content-Type',  'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+
+  const write = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    res.flush?.();
+  };
+
+  write('start', { query, stores: STORES.length });
+
+  const allResults = [];
+
+  for (let i = 0; i < STORES.length; i += 2) {
+    const batch = STORES.slice(i, i + 2);
+    const results = await Promise.all(batch.map(store =>
+      scrapeStore(store, query).then(sr => {
+        const storeData = {
+          id:       sr.storeId,
+          name:     sr.storeName,
+          ar:       sr.storeAr,
+          emoji:    sr.storeEmoji,
+          color:    sr.storeColor,
+          products: sr.products,
+          error:    sr.error,
+        };
+        write('store', storeData);
+        return storeData;
+      })
+    ));
+    allResults.push(...results);
+  }
+
+  const finalData = { query, timestamp: new Date().toISOString(), stores: allResults };
+  cacheSet(query.toLowerCase(), finalData);
+  write('done', finalData);
+  res.end();
 });
 
 /* ─── In-memory log ring buffer ────────────────────────────────── */
