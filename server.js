@@ -393,8 +393,37 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+/* ─── In-memory log ring buffer ────────────────────────────────── */
+const MAX_LOGS = 200;
+const recentLogs = [];
+
+function addLog(level, ...args) {
+  const entry = { ts: new Date().toISOString(), level, msg: args.join(' ') };
+  recentLogs.push(entry);
+  if (recentLogs.length > MAX_LOGS) recentLogs.shift();
+}
+
+const _origLog   = console.log.bind(console);
+const _origError = console.error.bind(console);
+console.log   = (...a) => { _origLog(...a);   addLog('info',  ...a.map(String)); };
+console.error = (...a) => { _origError(...a); addLog('error', ...a.map(String)); };
+
 /* ─── Health check ─────────────────────────────────────────────── */
-app.get('/api/health', (_, res) => res.json({ status: 'ok' }));
+app.get('/api/health', (_, res) => res.json({
+  status: 'ok',
+  uptime: process.uptime(),
+  memory: process.memoryUsage(),
+  browser: browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none',
+  stores: STORES.map(s => s.id),
+  proxy: PROXY_URL ? 'configured' : 'none',
+  timestamp: new Date().toISOString(),
+}));
+
+/* ─── Recent logs ───────────────────────────────────────────────── */
+app.get('/api/logs', (req, res) => {
+  const n = Math.min(parseInt(req.query.n || '50', 10), MAX_LOGS);
+  res.json({ logs: recentLogs.slice(-n) });
+});
 
 /* ─── Serve frontend ───────────────────────────────────────────── */
 app.get('/', (_, res) => res.sendFile(path.join(__dirname, 'grocery.html')));

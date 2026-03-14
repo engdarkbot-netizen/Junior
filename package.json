@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "setup": "npx playwright install chromium",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test-agent.mjs"
   },
   "repository": {
     "type": "git",
@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "playwright": "^1.58.2"
