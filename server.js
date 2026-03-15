@@ -17,7 +17,11 @@ const cors         = require('cors');
 const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
-const { chromium } = require('playwright');
+const { chromium: chromiumExtra } = require('playwright-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromiumExtra.use(StealthPlugin());
+// playwright-extra wraps playwright's chromium and adds stealth evasion
+const chromium = chromiumExtra;
 
 /* ─── Proxy-aware HTTP fetch via Playwright request API ─────────
  * Using native fetch() bypasses PROXY_URL — this version routes
@@ -1068,14 +1072,19 @@ function extractFromApiJson(json, storeId) {
 /* ─── Individual store scrapers ────────────────────────────────── */
 
 /* ─── fetchApi helper: try multiple URLs until one works ────────── */
-async function tryFetchUrls(urls, headers, mapper) {
+async function tryFetchUrls(urls, headers, mapper, storeId) {
+  const errs = [];
   for (const url of urls) {
     try {
       const json = await httpFetch(url, headers);
       const result = mapper(json);
       if (result.length > 0) return result;
-    } catch (_) {}
+      errs.push(`${url.split('/').slice(-2).join('/')}: 0 products`);
+    } catch (e) {
+      errs.push(`${url.split('/').slice(-2).join('/')}: ${e.message.split('\n')[0]}`);
+    }
   }
+  if (storeId) console.log(`[${storeId}] API tried: ${errs.join(' | ')}`);
   throw new Error('all API URLs failed');
 }
 
@@ -1100,6 +1109,17 @@ const STORES = [
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.noon.com/saudi-en/',
+    // Session-aware API call after warmup (cookies make this look like a real session)
+    sessionApiUrl: q => `https://www.noon.com/api/v1/catalog/listing/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en&sort_by=relevance`,
+    parseSessionApi: (json) => {
+      const hits = json.hits || json.data?.hits || json.results?.hits || json.results || [];
+      return hits.slice(0, 8).map(h => ({
+        name:  h.name || h.title || '',
+        price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
+        image: h.image_keys?.[0] ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg` : (h.image || ''),
+        url:   h.url ? `https://www.noon.com${h.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:     q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
   },
@@ -1198,8 +1218,20 @@ const STORES = [
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.luluhypermarket.com/en-sa/',
-    // LuLu is a Next.js SPA — needs networkidle to let React hydrate product cards
-    url:       q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
+    // After warmup, try their Next.js internal search API with session cookies
+    sessionApiUrl: q => `https://www.luluhypermarket.com/en-sa/api/search?keyword=${encodeURIComponent(q)}&limit=12`,
+    parseSessionApi: (json) => {
+      const items = json.products || json.data?.products || json.data || json.results || json.items || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.final_price ?? p.price?.value ?? p.final_price ?? p.price ?? 0),
+        image: p.image_url || p.thumbnail?.url || p.image || p.thumbnail || '',
+        url:   p.url || p.product_url || '',
+      })).filter(p => p.name && p.price > 0);
+    },
+    // LuLu search URL — /search redirects to home; try /search-results with keyword param
+    url:       q => `https://www.luluhypermarket.com/en-sa/search-results?keyword=${encodeURIComponent(q)}`,
     waitUntil: 'networkidle',
     waitFor:   '[data-testid*="product"], [class*="ProductCard"], [class*="product-card"], [class*="productCard"], .product-item, li.product',
   },
@@ -1224,6 +1256,17 @@ const STORES = [
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.tamimimarkets.com/',
+    // After warmup we have valid session cookies — use them to call Shopify's JSON API
+    sessionApiUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`,
+    parseSessionApi: (json) => {
+      const products = json.resources?.results?.products || [];
+      return products.map(p => ({
+        name:  p.title || '',
+        price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
+        image: p.featured_image?.url || (typeof p.featured_image === 'string' ? p.featured_image : '') || '',
+        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:     q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"], [class*="product-card"]',
   },
@@ -1325,11 +1368,49 @@ async function scrapeStore(store, query) {
       } catch (_) {}
     });
 
-    // Homepage warm-up: visit homepage first to establish a legitimate-looking session
-    // before navigating to search — helps bypass server-side bot detection
+    // Homepage warm-up: establishes real session cookies before any API/search calls
     if (store.warmupUrl) {
-      await page.goto(store.warmupUrl, { timeout: 15000, waitUntil: 'domcontentloaded' }).catch(() => {});
-      await page.waitForTimeout(1200 + Math.random() * 800); // 1.2–2s random delay
+      await page.goto(store.warmupUrl, { timeout: 18000, waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForTimeout(1200 + Math.random() * 800);
+
+      // Session API: after warmup we have valid cookies — try the JSON API directly
+      // This bypasses bot detection because the request comes from a real browser session
+      if (store.sessionApiUrl && capturedApiProducts.length === 0) {
+        try {
+          const resp = await page.context().request.get(store.sessionApiUrl(query), {
+            headers: {
+              'Accept':          'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'Referer':         store.warmupUrl,
+            },
+            timeout: 12000,
+            failOnStatusCode: false,
+          });
+          if (resp.ok()) {
+            const json = await resp.json();
+            const products = store.parseSessionApi(json);
+            if (products.length > 0) {
+              capturedApiProducts.push(...products);
+              console.log(`[${store.id}] session-API → ${products.length} products`);
+            } else {
+              console.log(`[${store.id}] session-API returned 0 products (status ${resp.status()})`);
+            }
+          } else {
+            console.log(`[${store.id}] session-API HTTP ${resp.status()}`);
+          }
+        } catch (e) {
+          console.log(`[${store.id}] session-API error: ${e.message.split('\n')[0]}`);
+        }
+      }
+    }
+
+    // Skip full page load if we already have products from session API
+    if (capturedApiProducts.length >= 3) {
+      result.products = capturedApiProducts
+        .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i)
+        .slice(0, 8);
+      console.log(`[${store.id}] "${query}" → ${result.products.length} products (session-API)`);
+      return result;
     }
 
     // Navigate to search page — use per-store waitUntil (SPAs need 'networkidle')
