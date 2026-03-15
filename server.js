@@ -17,11 +17,19 @@ const cors         = require('cors');
 const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
-const { chromium: chromiumExtra } = require('playwright-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-chromiumExtra.use(StealthPlugin());
-// playwright-extra wraps playwright's chromium and adds stealth evasion
-const chromium = chromiumExtra;
+// Use playwright-extra + stealth plugin to bypass bot detection
+// Falls back to regular playwright if playwright-extra isn't installed yet
+let chromium;
+try {
+  const { chromium: chromiumExtra } = require('playwright-extra');
+  const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+  chromiumExtra.use(StealthPlugin());
+  chromium = chromiumExtra;
+  console.log('[stealth] playwright-extra + stealth plugin loaded');
+} catch (_) {
+  ({ chromium } = require('playwright'));
+  console.log('[stealth] playwright-extra not available — using standard playwright');
+}
 
 /* ─── Proxy-aware HTTP fetch via Playwright request API ─────────
  * Using native fetch() bypasses PROXY_URL — this version routes
@@ -1177,19 +1185,19 @@ const STORES = [
     ar:   'دانوب',
     emoji: '🔵',
     color: '#1d3557',
-    // Danube uses Magento — try Magento search endpoints
+    // Danube uses IATC custom platform (BinDawood Holding subsidiary)
+    // URL patterns look like Magento but backend is custom — browser interception is primary strategy
     fetchApi: async (q) => tryFetchUrls([
       `https://www.danube.com.sa/search/ajax/suggest/?q=${encodeURIComponent(q)}&limit=8`,
-      `https://www.danube.com.sa/catalogsearch/ajax/suggest/?q=${encodeURIComponent(q)}`,
-      `https://www.danube.com.sa/rest/V1/products?searchCriteria[filterGroups][0][filters][0][field]=name&searchCriteria[filterGroups][0][filters][0][value]=%25${encodeURIComponent(q)}%25&searchCriteria[filterGroups][0][filters][0][conditionType]=like&searchCriteria[pageSize]=8`,
-    ], { Referer: 'https://www.danube.com.sa/' }, (json) => {
-      const items = json.products || json.data?.items || json.items || json.data || [];
+      `https://www.danube.com.sa/graphql?query={products(search:"${q}",pageSize:8){items{name,price_range{minimum_price{final_price{value}}},small_image{url},url_key}}}`,
+    ], { Referer: 'https://www.danube.com.sa/', 'Content-Type': 'application/json' }, (json) => {
+      const items = json.data?.products?.items || json.products || json.data || json.items || [];
       if (!Array.isArray(items)) return [];
       return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.custom_attributes?.find?.(a=>a.attribute_code==='price')?.value ?? p.price ?? 0),
-        image: p.image || p.thumbnail || p.small_image?.url || '',
-        url:   p.url || p.request_path ? `https://www.danube.com.sa/${p.request_path||''}` : '',
+        price: parseArabicPrice(p.price_range?.minimum_price?.final_price?.value ?? p.price?.final_price ?? p.price ?? 0),
+        image: p.small_image?.url || p.image || p.thumbnail || '',
+        url:   p.url_key ? `https://www.danube.com.sa/${p.url_key}` : (p.url || ''),
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.danube.com.sa/',
@@ -1202,38 +1210,37 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
-    // LuLu KSA — try their Next.js API routes
+    // LuLu uses SAP Hybris/Commerce Cloud (same as Carrefour) — base site ID: lulusa
+    // Browser network interception catches the OCC API calls automatically
     fetchApi: async (q) => tryFetchUrls([
-      `https://www.luluhypermarket.com/en-sa/api/search?q=${encodeURIComponent(q)}&limit=8`,
-      `https://www.luluhypermarket.com/en-sa/api/products/search?keyword=${encodeURIComponent(q)}&limit=8`,
-      `https://www.luluhypermarket.com/api/search?q=${encodeURIComponent(q)}&limit=8&country=SA`,
-    ], { Referer: 'https://www.luluhypermarket.com/' }, (json) => {
-      const items = json.products || json.data?.products || json.data || json.results || json.items || [];
-      if (!Array.isArray(items)) return [];
-      return items.slice(0, 8).map(p => ({
-        name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price?.regularPrice?.amount?.value ?? p.price ?? 0),
-        image: p.image_url || p.thumbnail?.url || p.image || p.thumbnail || '',
-        url:   p.url || p.product_url || '',
+      // SAP OCC v2 — same pattern as Carrefour but with lulusa baseSiteId
+      `https://www.luluhypermarket.com/occ/v2/lulusa/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR&fields=FULL&currentPage=0`,
+      `https://www.luluhypermarket.com/occ/v2/luluksa/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR&fields=FULL`,
+    ], { 'x-anonymous-consents': '[]', Referer: 'https://www.luluhypermarket.com/' }, (json) => {
+      const products = json.products || [];
+      return products.map(p => ({
+        name:  p.name || '',
+        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+        image: p.images?.[0]?.url ? `https://www.luluhypermarket.com${p.images[0].url}` : '',
+        url:   p.url ? `https://www.luluhypermarket.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.luluhypermarket.com/en-sa/',
-    // After warmup, try their Next.js internal search API with session cookies
-    sessionApiUrl: q => `https://www.luluhypermarket.com/en-sa/api/search?keyword=${encodeURIComponent(q)}&limit=12`,
+    // Session API: after warmup use OCC with browser session for auth
+    sessionApiUrl: q => `https://www.luluhypermarket.com/occ/v2/lulusa/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR&fields=FULL&currentPage=0`,
     parseSessionApi: (json) => {
-      const items = json.products || json.data?.products || json.data || json.results || json.items || [];
-      if (!Array.isArray(items)) return [];
-      return items.slice(0, 8).map(p => ({
-        name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final_price ?? p.price?.value ?? p.final_price ?? p.price ?? 0),
-        image: p.image_url || p.thumbnail?.url || p.image || p.thumbnail || '',
-        url:   p.url || p.product_url || '',
+      const products = json.products || [];
+      return products.map(p => ({
+        name:  p.name || '',
+        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+        image: p.images?.[0]?.url ? `https://www.luluhypermarket.com${p.images[0].url}` : '',
+        url:   p.url ? `https://www.luluhypermarket.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
     },
-    // LuLu search URL — /search redirects to home; try /search-results with keyword param
-    url:       q => `https://www.luluhypermarket.com/en-sa/search-results?keyword=${encodeURIComponent(q)}`,
+    // LuLu SAP Spartacus frontend URL — browser interception catches OCC API calls
+    url:       q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}&searchType=regular`,
     waitUntil: 'networkidle',
-    waitFor:   '[data-testid*="product"], [class*="ProductCard"], [class*="product-card"], [class*="productCard"], .product-item, li.product',
+    waitFor:   'cx-product-grid-item, cx-product-card, [class*="ProductCard"], .product-item, li.product',
   },
   {
     id:   'tamimi',
@@ -1241,34 +1248,36 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
-    // Tamimi is Shopify — Predictive Search API is publicly accessible
+    // Tamimi uses ZopSmart platform — real online store at shop.tamimimarkets.com
+    // tamimimarkets.com is just a brochure site; shop subdomain has actual grocery store
     fetchApi: async (q) => tryFetchUrls([
-      `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`,
-      `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources%5Btype%5D=product&resources%5Blimit%5D=8`,
-    ], { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }, (json) => {
-      const products = json.resources?.results?.products || [];
-      return products.map(p => ({
-        name:  p.title || '',
-        // Shopify Predictive Search returns SAR price directly (NOT in halalas)
-        price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
-        image: p.featured_image?.url || (typeof p.featured_image === 'string' ? p.featured_image : '') || '',
-        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      `https://shop.tamimimarkets.com/api/2.0/catalog/products?q=${encodeURIComponent(q)}&limit=8&page=1`,
+      `https://shop.tamimimarkets.com/api/catalog/products/search?q=${encodeURIComponent(q)}&page_size=8`,
+    ], { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json', Referer: 'https://shop.tamimimarkets.com/' }, (json) => {
+      const items = json.products || json.data?.products || json.data || json.items || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.special ?? p.price?.regular ?? p.special_price ?? p.price ?? 0),
+        image: p.image_url || p.image?.url || p.thumbnail || '',
+        url:   p.url || p.product_url || (p.slug ? `https://shop.tamimimarkets.com/${p.slug}` : ''),
       })).filter(p => p.name && p.price > 0);
     }),
-    warmupUrl: 'https://www.tamimimarkets.com/',
-    // After warmup we have valid session cookies — use them to call Shopify's JSON API
-    sessionApiUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`,
+    warmupUrl: 'https://shop.tamimimarkets.com/',
+    // Session API after warmup with real ZopSmart session cookies
+    sessionApiUrl: q => `https://shop.tamimimarkets.com/api/2.0/catalog/products?q=${encodeURIComponent(q)}&limit=8&page=1`,
     parseSessionApi: (json) => {
-      const products = json.resources?.results?.products || [];
-      return products.map(p => ({
-        name:  p.title || '',
-        price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
-        image: p.featured_image?.url || (typeof p.featured_image === 'string' ? p.featured_image : '') || '',
-        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      const items = json.products || json.data?.products || json.data || json.items || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.special ?? p.price?.regular ?? p.special_price ?? p.price ?? 0),
+        image: p.image_url || p.image?.url || p.thumbnail || '',
+        url:   p.url || p.product_url || (p.slug ? `https://shop.tamimimarkets.com/${p.slug}` : ''),
       })).filter(p => p.name && p.price > 0);
     },
-    url:     q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"], [class*="product-card"]',
+    url:     q => `https://shop.tamimimarkets.com/search?q=${encodeURIComponent(q)}`,
+    waitFor: '.product-card, [class*="ProductCard"], [class*="product-card"], .product-item, [data-testid*="product"]',
   },
   {
     id:   'othaim',
@@ -1301,19 +1310,19 @@ const STORES = [
     ar:   'بن داود',
     emoji: '🟠',
     color: '#e76f51',
-    // Bindawood — try multiple API patterns
+    // BinDawood uses same IATC platform as Danube (BinDawood Holding subsidiary)
+    // Try GraphQL (same as Danube) and Magento-like suggest endpoint
     fetchApi: async (q) => tryFetchUrls([
       `https://www.bindawood.com/search/ajax/suggest/?q=${encodeURIComponent(q)}&limit=8`,
-      `https://www.bindawood.com/catalogsearch/ajax/suggest/?q=${encodeURIComponent(q)}`,
-      `https://bindawood.com/api/products?keyword=${encodeURIComponent(q)}&limit=8`,
-    ], { Referer: 'https://www.bindawood.com/' }, (json) => {
-      const items = json.products || json.data || json.items || [];
+      `https://www.bindawood.com/graphql?query={products(search:"${q}",pageSize:8){items{name,price_range{minimum_price{final_price{value}}},small_image{url},url_key}}}`,
+    ], { Referer: 'https://www.bindawood.com/', 'Content-Type': 'application/json' }, (json) => {
+      const items = json.data?.products?.items || json.products || json.data || json.items || [];
       if (!Array.isArray(items)) return [];
       return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
-        image: p.image || p.thumbnail || '',
-        url:   p.url || p.product_url || '',
+        price: parseArabicPrice(p.price_range?.minimum_price?.final_price?.value ?? p.price?.final ?? p.final_price ?? p.price ?? 0),
+        image: p.small_image?.url || p.image || p.thumbnail || '',
+        url:   p.url_key ? `https://www.bindawood.com/${p.url_key}` : (p.url || ''),
       })).filter(p => p.name && p.price > 0);
     }),
     warmupUrl: 'https://www.bindawood.com/',
