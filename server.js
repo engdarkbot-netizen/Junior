@@ -19,26 +19,41 @@ const zlib         = require('zlib');
 const compression  = require('compression');
 const { chromium } = require('playwright');
 
-/* ─── Lightweight HTTP fetch helper (direct store APIs, no browser) */
-async function httpFetch(url, extraHeaders = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept':          'application/json, */*;q=0.8',
-        'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8',
-        'Referer':         'https://www.google.com/',
-        ...extraHeaders,
-      },
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    clearTimeout(timer);
+/* ─── Proxy-aware HTTP fetch via Playwright request API ─────────
+ * Using native fetch() bypasses PROXY_URL — this version routes
+ * all store API calls through the same Saudi proxy as the browser.
+ * ─────────────────────────────────────────────────────────────── */
+let _apiCtx = null;
+async function getApiCtx() {
+  if (_apiCtx) return _apiCtx;
+  const { request } = require('playwright');
+  const opts = {
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8',
+      'Accept':          'application/json, */*;q=0.8',
+    },
+  };
+  if (process.env.PROXY_URL) {
+    opts.proxy = {
+      server:   process.env.PROXY_URL,
+      username: process.env.PROXY_USER || undefined,
+      password: process.env.PROXY_PASS || undefined,
+    };
   }
+  _apiCtx = await request.newContext(opts);
+  return _apiCtx;
+}
+
+async function httpFetch(url, extraHeaders = {}) {
+  const ctx = await getApiCtx();
+  const resp = await ctx.get(url, {
+    headers: { 'Referer': 'https://www.google.com/', ...extraHeaders },
+    timeout: 12000,
+    failOnStatusCode: false,
+  });
+  if (!resp.ok()) throw new Error(`HTTP ${resp.status()}`);
+  return resp.json();
 }
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
@@ -1052,6 +1067,18 @@ function extractFromApiJson(json, storeId) {
 
 /* ─── Individual store scrapers ────────────────────────────────── */
 
+/* ─── fetchApi helper: try multiple URLs until one works ────────── */
+async function tryFetchUrls(urls, headers, mapper) {
+  for (const url of urls) {
+    try {
+      const json = await httpFetch(url, headers);
+      const result = mapper(json);
+      if (result.length > 0) return result;
+    } catch (_) {}
+  }
+  throw new Error('all API URLs failed');
+}
+
 const STORES = [
   {
     id:   'noon',
@@ -1059,21 +1086,21 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
-    // Try Noon's catalog suggest API first (no auth required for autocomplete)
-    fetchApi: async (q) => {
-      // Noon exposes a lightweight suggest endpoint used by the search bar
-      const url = `https://www.noon.com/api/v1/pages/search/query/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en`;
-      const json = await httpFetch(url, { 'x-country': 'SAU', 'x-language': 'en' });
-      const hits = json.hits || json.data?.hits || json.results || [];
-      if (!hits.length) throw new Error('no hits');
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.noon.com/api/v1/catalog/listing/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en&sort_by=relevance&cat=grocery`,
+      `https://www.noon.com/api/v3/catalog/listing/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en`,
+      `https://www.noon.com/api/v1/catalog/search/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en`,
+    ], { 'x-country': 'SAU', 'x-language': 'en', 'x-currency': 'SAR' }, (json) => {
+      const hits = json.hits || json.data?.hits || json.results?.hits || json.results || [];
       return hits.slice(0, 8).map(h => ({
         name:  h.name || h.title || '',
         price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
         image: h.image_keys?.[0] ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg` : (h.image || ''),
         url:   h.url ? `https://www.noon.com${h.url}` : '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
+    }),
+    warmupUrl: 'https://www.noon.com/saudi-en/',
+    url:     q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
   },
   {
@@ -1082,20 +1109,21 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
-    // Carrefour OCC REST API (SAP Spartacus — publicly accessible)
-    fetchApi: async (q) => {
-      const url = `https://www.carrefourksa.com/api/v2/mafkw/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR`;
-      const json = await httpFetch(url, { 'x-anonymous-consents': '[]' });
+    // Carrefour SAP Spartacus OCC API — try multiple URL patterns
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.carrefourksa.com/occ/v2/mafsau/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR&fields=FULL`,
+      `https://www.carrefourksa.com/mafsau/occ/v2/mafsau/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR`,
+      `https://api.carrefourksa.com/api/v2/mafsau/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR`,
+    ], { 'x-anonymous-consents': '[]' }, (json) => {
       const products = json.products || [];
-      if (!products.length) throw new Error('no products');
       return products.map(p => ({
         name:  p.name || '',
         price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
         image: p.images?.[0]?.url ? `https://www.carrefourksa.com${p.images[0].url}` : '',
         url:   p.url ? `https://www.carrefourksa.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
+    }),
+    url:     q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
     waitFor: 'cx-product-grid-item, cx-product-card, .product-card, [class*="product"]',
   },
   {
@@ -1104,20 +1132,23 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
-    // Panda runs on Salla platform — use their storefront search API
-    fetchApi: async (q) => {
-      const url = `https://panda.com.sa/api/products?keyword=${encodeURIComponent(q)}&limit=8&page=1`;
-      const json = await httpFetch(url, { Origin: 'https://panda.com.sa', Referer: 'https://panda.com.sa/' });
-      const items = json.data || json.products || json.items || [];
-      if (!Array.isArray(items) || !items.length) throw new Error('no items');
-      return items.map(p => ({
+    // Panda uses Salla platform — try multiple Salla API patterns
+    fetchApi: async (q) => tryFetchUrls([
+      `https://panda.com.sa/api/products?keyword=${encodeURIComponent(q)}&limit=8&page=1`,
+      `https://panda.com.sa/api/products?search[keyword]=${encodeURIComponent(q)}&per_page=8`,
+      `https://panda.com.sa/api/search?q=${encodeURIComponent(q)}&limit=8`,
+    ], { Origin: 'https://panda.com.sa', Referer: 'https://panda.com.sa/' }, (json) => {
+      const items = json.data || json.products || json.items || json.results || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
         name:  p.name?.ar || p.name?.en || (typeof p.name === 'string' ? p.name : '') || p.title || '',
         price: parseArabicPrice(p.price?.amount ?? p.regular_price ?? p.price ?? 0),
         image: p.thumbnail || p.main_image || p.image?.url || '',
-        url:   p.url || p.slug ? `https://panda.com.sa/products/${p.slug || ''}` : '',
+        url:   p.url || (p.slug ? `https://panda.com.sa/products/${p.slug}` : ''),
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://panda.com.sa/search?q=${encodeURIComponent(q)}`,
+    }),
+    warmupUrl: 'https://panda.com.sa/',
+    url:     q => `https://panda.com.sa/search?q=${encodeURIComponent(q)}`,
     waitFor: 'salla-product-card, .salla-product-card, [class*="salla-product"], .product-card',
   },
   {
@@ -1126,20 +1157,23 @@ const STORES = [
     ar:   'دانوب',
     emoji: '🔵',
     color: '#1d3557',
-    // Danube uses a custom storefront — try their search/suggest endpoint
-    fetchApi: async (q) => {
-      const url = `https://www.danube.com.sa/api/catalog_product_search?q=${encodeURIComponent(q)}&limit=8`;
-      const json = await httpFetch(url, { Referer: 'https://www.danube.com.sa/' });
-      const items = json.products || json.data || json.items || [];
-      if (!Array.isArray(items) || !items.length) throw new Error('no items');
-      return items.map(p => ({
+    // Danube uses Magento — try Magento search endpoints
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.danube.com.sa/search/ajax/suggest/?q=${encodeURIComponent(q)}&limit=8`,
+      `https://www.danube.com.sa/catalogsearch/ajax/suggest/?q=${encodeURIComponent(q)}`,
+      `https://www.danube.com.sa/rest/V1/products?searchCriteria[filterGroups][0][filters][0][field]=name&searchCriteria[filterGroups][0][filters][0][value]=%25${encodeURIComponent(q)}%25&searchCriteria[filterGroups][0][filters][0][conditionType]=like&searchCriteria[pageSize]=8`,
+    ], { Referer: 'https://www.danube.com.sa/' }, (json) => {
+      const items = json.products || json.data?.items || json.items || json.data || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price ?? 0),
-        image: p.image || p.thumbnail || '',
-        url:   p.url || p.product_url || '',
+        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.custom_attributes?.find?.(a=>a.attribute_code==='price')?.value ?? p.price ?? 0),
+        image: p.image || p.thumbnail || p.small_image?.url || '',
+        url:   p.url || p.request_path ? `https://www.danube.com.sa/${p.request_path||''}` : '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.danube.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
+    }),
+    warmupUrl: 'https://www.danube.com.sa/',
+    url:     q => `https://www.danube.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
   {
@@ -1148,21 +1182,26 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
-    // LuLu KSA uses a custom platform — try their product search API
-    fetchApi: async (q) => {
-      const url = `https://www.luluhypermarket.com/en-sa/search-suggest?q=${encodeURIComponent(q)}&limit=8`;
-      const json = await httpFetch(url, { Referer: 'https://www.luluhypermarket.com/' });
-      const items = json.products || json.data || json.suggestions || [];
-      if (!Array.isArray(items) || !items.length) throw new Error('no items');
-      return items.map(p => ({
+    // LuLu KSA — try their Next.js API routes
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.luluhypermarket.com/en-sa/api/search?q=${encodeURIComponent(q)}&limit=8`,
+      `https://www.luluhypermarket.com/en-sa/api/products/search?keyword=${encodeURIComponent(q)}&limit=8`,
+      `https://www.luluhypermarket.com/api/search?q=${encodeURIComponent(q)}&limit=8&country=SA`,
+    ], { Referer: 'https://www.luluhypermarket.com/' }, (json) => {
+      const items = json.products || json.data?.products || json.data || json.results || json.items || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price ?? 0),
-        image: p.image_url || p.image || p.thumbnail || '',
+        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price?.regularPrice?.amount?.value ?? p.price ?? 0),
+        image: p.image_url || p.thumbnail?.url || p.image || p.thumbnail || '',
         url:   p.url || p.product_url || '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product-card"]',
+    }),
+    warmupUrl: 'https://www.luluhypermarket.com/en-sa/',
+    // LuLu is a Next.js SPA — needs networkidle to let React hydrate product cards
+    url:       q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
+    waitUntil: 'networkidle',
+    waitFor:   '[data-testid*="product"], [class*="ProductCard"], [class*="product-card"], [class*="productCard"], .product-item, li.product',
   },
   {
     id:   'tamimi',
@@ -1170,21 +1209,22 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
-    // Tamimi is a Shopify store — use the public Predictive Search JSON API
-    fetchApi: async (q) => {
-      const url = `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`;
-      const json = await httpFetch(url, { 'X-Requested-With': 'XMLHttpRequest' });
+    // Tamimi is Shopify — Predictive Search API is publicly accessible
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`,
+      `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources%5Btype%5D=product&resources%5Blimit%5D=8`,
+    ], { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' }, (json) => {
       const products = json.resources?.results?.products || [];
-      if (!products.length) throw new Error('no products');
       return products.map(p => ({
         name:  p.title || '',
-        // Shopify Predictive Search returns price as a formatted string like "SAR 25.50"
+        // Shopify Predictive Search returns SAR price directly (NOT in halalas)
         price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
-        image: p.featured_image?.url || '',
+        image: p.featured_image?.url || (typeof p.featured_image === 'string' ? p.featured_image : '') || '',
         url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
+    }),
+    warmupUrl: 'https://www.tamimimarkets.com/',
+    url:     q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"], [class*="product-card"]',
   },
   {
@@ -1193,20 +1233,23 @@ const STORES = [
     ar:   'العثيم',
     emoji: '🟡',
     color: '#f4a261',
-    // Othaim uses a custom platform — try their catalog search API
-    fetchApi: async (q) => {
-      const url = `https://www.othaim.com.sa/api/products/search?keyword=${encodeURIComponent(q)}&limit=8`;
-      const json = await httpFetch(url, { Referer: 'https://www.othaim.com.sa/' });
-      const items = json.products || json.data || json.results || [];
-      if (!Array.isArray(items) || !items.length) throw new Error('no items');
-      return items.map(p => ({
+    // Othaim uses Magento — try multiple patterns
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.othaim.com.sa/search/ajax/suggest/?q=${encodeURIComponent(q)}&limit=8`,
+      `https://www.othaim.com.sa/catalogsearch/ajax/suggest/?q=${encodeURIComponent(q)}`,
+      `https://othaim.com.sa/api/v1/products?keyword=${encodeURIComponent(q)}&limit=8`,
+    ], { Referer: 'https://www.othaim.com.sa/' }, (json) => {
+      const items = json.products || json.data || json.results || json.items || [];
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price ?? 0),
-        image: p.image || p.thumbnail || '',
-        url:   p.url || '',
+        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
+        image: p.image || p.thumbnail || p.small_image?.url || '',
+        url:   p.url || p.request_path ? `https://www.othaim.com.sa/${p.request_path||''}` : '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.othaim.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
+    }),
+    warmupUrl: 'https://www.othaim.com.sa/',
+    url:     q => `https://www.othaim.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
   {
@@ -1215,20 +1258,23 @@ const STORES = [
     ar:   'بن داود',
     emoji: '🟠',
     color: '#e76f51',
-    // Bindawood — try their search API
-    fetchApi: async (q) => {
-      const url = `https://www.bindawood.com/api/products/search?q=${encodeURIComponent(q)}&limit=8`;
-      const json = await httpFetch(url, { Referer: 'https://www.bindawood.com/' });
+    // Bindawood — try multiple API patterns
+    fetchApi: async (q) => tryFetchUrls([
+      `https://www.bindawood.com/search/ajax/suggest/?q=${encodeURIComponent(q)}&limit=8`,
+      `https://www.bindawood.com/catalogsearch/ajax/suggest/?q=${encodeURIComponent(q)}`,
+      `https://bindawood.com/api/products?keyword=${encodeURIComponent(q)}&limit=8`,
+    ], { Referer: 'https://www.bindawood.com/' }, (json) => {
       const items = json.products || json.data || json.items || [];
-      if (!Array.isArray(items) || !items.length) throw new Error('no items');
-      return items.map(p => ({
+      if (!Array.isArray(items)) return [];
+      return items.slice(0, 8).map(p => ({
         name:  p.name || p.title || '',
-        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price ?? 0),
+        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
         image: p.image || p.thumbnail || '',
         url:   p.url || p.product_url || '',
       })).filter(p => p.name && p.price > 0);
-    },
-    url:  q => `https://www.bindawood.com/search?q=${encodeURIComponent(q)}`,
+    }),
+    warmupUrl: 'https://www.bindawood.com/',
+    url:     q => `https://www.bindawood.com/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
 ];
@@ -1279,25 +1325,32 @@ async function scrapeStore(store, query) {
       } catch (_) {}
     });
 
-    // Navigate — timeout is non-fatal (we may already have API data)
+    // Homepage warm-up: visit homepage first to establish a legitimate-looking session
+    // before navigating to search — helps bypass server-side bot detection
+    if (store.warmupUrl) {
+      await page.goto(store.warmupUrl, { timeout: 15000, waitUntil: 'domcontentloaded' }).catch(() => {});
+      await page.waitForTimeout(1200 + Math.random() * 800); // 1.2–2s random delay
+    }
+
+    // Navigate to search page — use per-store waitUntil (SPAs need 'networkidle')
     await page.goto(store.url(query), {
-      timeout: 28000,
-      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+      waitUntil: store.waitUntil || 'domcontentloaded',
     }).catch(() => {});
 
     // Wait for product elements or network to settle
     if (capturedApiProducts.length < 2) {
-      // Try to wait for product selector
-      await page.waitForSelector(store.waitFor, { timeout: 10000 }).catch(() => {});
+      // Try to wait for product selector (longer timeout for SPAs)
+      await page.waitForSelector(store.waitFor, { timeout: 12000 }).catch(() => {});
       // Simulate human scroll to trigger lazy-loaded grids
       await page.evaluate(() => {
         window.scrollTo({ top: document.body.scrollHeight / 3, behavior: 'smooth' });
       }).catch(() => {});
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(1000);
       await page.evaluate(() => {
         window.scrollTo({ top: document.body.scrollHeight * 2 / 3, behavior: 'smooth' });
       }).catch(() => {});
-      await page.waitForTimeout(1200);
+      await page.waitForTimeout(1500);
     }
 
     // Prefer network-intercepted API data; fall back to DOM extraction
