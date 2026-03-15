@@ -19,6 +19,28 @@ const zlib         = require('zlib');
 const compression  = require('compression');
 const { chromium } = require('playwright');
 
+/* ─── Lightweight HTTP fetch helper (direct store APIs, no browser) */
+async function httpFetch(url, extraHeaders = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept':          'application/json, */*;q=0.8',
+        'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8',
+        'Referer':         'https://www.google.com/',
+        ...extraHeaders,
+      },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* ─── Arabic/English query normaliser ──────────────────────────── */
 const MAX_QUERY_LEN = 200;
 
@@ -651,12 +673,43 @@ async function newPage(browser) {
   // Block fonts, media — keep HTML/JS/XHR for SPA rendering
   await ctx.route(/\.(woff2?|ttf|eot|otf|mp4|mp3|webm|gif)(\?.*)?$/, r => r.abort());
 
-  // Mask Playwright fingerprint
+  // Mask Playwright fingerprint (comprehensive anti-bot evasion)
   await ctx.addInitScript(() => {
+    // Core automation marker removal
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
-    Object.defineProperty(navigator, 'language',  { get: () => 'ar-SA' });
-    Object.defineProperty(navigator, 'languages', { get: () => ['ar-SA', 'ar', 'en-US'] });
-    window.chrome = { runtime: {} };
+    // Language + platform spoofing
+    Object.defineProperty(navigator, 'language',            { get: () => 'ar-SA' });
+    Object.defineProperty(navigator, 'languages',           { get: () => ['ar-SA', 'ar', 'en-US', 'en'] });
+    Object.defineProperty(navigator, 'platform',            { get: () => 'Win32' });
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+    Object.defineProperty(navigator, 'deviceMemory',        { get: () => 8 });
+    Object.defineProperty(navigator, 'maxTouchPoints',      { get: () => 0 });
+    // Fake plugin list (headless has 0 — real Chrome has many)
+    const fakePlugins = [
+      { name: 'Chrome PDF Plugin',      filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+      { name: 'Chrome PDF Viewer',      filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
+      { name: 'Native Client',          filename: 'internal-nacl-plugin', description: '' },
+    ];
+    Object.defineProperty(navigator, 'plugins', { get: () => fakePlugins });
+    Object.defineProperty(navigator, 'mimeTypes', { get: () => [] });
+    // Chrome runtime object (headless lacks this entirely)
+    window.chrome = {
+      app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' } },
+      runtime: { id: undefined, connect: () => {}, sendMessage: () => {} },
+      loadTimes: () => ({}),
+      csi: () => ({}),
+    };
+    // Permissions API (bots usually throw or return different values)
+    try {
+      const origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+      window.navigator.permissions.query = (params) =>
+        params.name === 'notifications'
+          ? Promise.resolve({ state: Notification.permission })
+          : origQuery(params);
+    } catch (_) {}
+    // Remove Playwright internal globals
+    try { delete window.__playwright; } catch (_) {}
+    try { delete window.__pw_manual; } catch (_) {}
   });
 
   return ctx.newPage();
@@ -879,18 +932,17 @@ function extractFromApiJson(json, storeId) {
       })).filter(p => p.name && p.price > 0);
     }
 
-    // ── Tamimi (Shopify) ─────────────────────────────────────
+    // ── Tamimi (Shopify Predictive Search) ───────────────────
     if (storeId === 'tamimi') {
       const products = json.resources?.results?.products
                     || json.products
                     || json.items || [];
       if (products.length) return products.slice(0, 10).map(p => ({
         name:  p.title || p.name || '',
-        // Shopify: price is in cents as string e.g. "895" = 8.95
-        price: parseArabicPrice(p.price) > 100
-               ? parseArabicPrice(p.price) / 100
-               : parseArabicPrice(p.price),
-        image: p.image || p.featured_image || '',
+        // Shopify Predictive Search API returns prices in the store currency (SAR) directly
+        // e.g. "25.50" = 25.50 SAR — do NOT divide by 100
+        price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
+        image: p.featured_image?.url || (typeof p.featured_image === 'string' ? p.featured_image : '') || p.image || '',
         url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
     }
@@ -900,23 +952,62 @@ function extractFromApiJson(json, storeId) {
       const products = json.data || json.products || json.items || [];
       if (Array.isArray(products) && products.length) {
         return products.slice(0, 10).map(p => ({
-          name:  p.name?.ar || p.name?.en || p.name || p.title || '',
-          price: parseArabicPrice(p.price?.amount ?? p.price ?? 0),
-          image: p.thumbnail || p.image?.url || '',
-          url:   p.url || p.slug || '',
+          name:  p.name?.ar || p.name?.en || (typeof p.name === 'string' ? p.name : '') || p.title || '',
+          price: parseArabicPrice(p.price?.amount ?? p.regular_price ?? p.price ?? 0),
+          image: p.thumbnail || p.main_image || p.image?.url || '',
+          url:   p.url || (p.slug ? `https://panda.com.sa/products/${p.slug}` : ''),
         })).filter(p => p.name && p.price > 0);
       }
     }
 
     // ── Danube ───────────────────────────────────────────────
     if (storeId === 'danube') {
-      const products = json.products || json.data?.products || json.items || [];
+      const products = json.products || json.data?.products || json.data || json.items || [];
       if (Array.isArray(products) && products.length) {
         return products.slice(0, 10).map(p => ({
           name:  p.name || p.title || '',
-          price: parseArabicPrice(p.price?.final_price ?? p.price ?? 0),
+          price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
+          image: p.image || p.thumbnail || p.small_image || '',
+          url:   p.url || p.product_url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── LuLu ─────────────────────────────────────────────────
+    if (storeId === 'lulu') {
+      const products = json.products || json.data?.products || json.data || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price?.regularPrice?.amount?.value ?? p.price ?? 0),
+          image: p.image_url || p.image || p.thumbnail || '',
+          url:   p.url || p.product_url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Othaim ───────────────────────────────────────────────
+    if (storeId === 'othaim') {
+      const products = json.products || json.data || json.results || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
+          image: p.image || p.thumbnail || p.small_image || '',
+          url:   p.url || p.product_url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Bindawood ─────────────────────────────────────────────
+    if (storeId === 'bindawood') {
+      const products = json.products || json.data || json.items || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price?.value ?? p.price ?? 0),
           image: p.image || p.thumbnail || '',
-          url:   p.url || '',
+          url:   p.url || p.product_url || '',
         })).filter(p => p.name && p.price > 0);
       }
     }
@@ -924,19 +1015,23 @@ function extractFromApiJson(json, storeId) {
     // ── Generic: walk JSON tree for product arrays ───────────
     const candidates = [];
     function walkJson(node, depth = 0) {
-      if (depth > 5 || candidates.length >= 10) return;
-      if (Array.isArray(node) && node.length >= 1) {
+      if (depth > 6 || candidates.length >= 10) return;
+      if (Array.isArray(node) && node.length >= 2) {
         const first = node[0];
         if (first && typeof first === 'object') {
           const hasName  = 'name' in first || 'title' in first;
-          const hasPrice = 'price' in first || 'sale_price' in first || 'amount' in first;
+          const hasPrice = 'price' in first || 'sale_price' in first || 'amount' in first || 'final_price' in first;
           if (hasName && hasPrice) {
             node.slice(0, 10).forEach(p => {
               const name  = p.name || p.title || '';
               const price = parseArabicPrice(
-                p.sale_price ?? p.price?.amount ?? p.price?.value ?? p.price ?? 0
+                p.sale_price ?? p.price?.amount ?? p.price?.value ?? p.final_price ?? p.price ?? 0
               );
-              if (name && price > 0) candidates.push({ name, price, image: p.image || '', url: p.url || '' });
+              if (name && price > 0) candidates.push({
+                name, price,
+                image: p.image || p.thumbnail || p.image_url || '',
+                url:   p.url || p.product_url || '',
+              });
             });
             return;
           }
@@ -964,6 +1059,20 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
+    // Try Noon's catalog suggest API first (no auth required for autocomplete)
+    fetchApi: async (q) => {
+      // Noon exposes a lightweight suggest endpoint used by the search bar
+      const url = `https://www.noon.com/api/v1/pages/search/query/?q=${encodeURIComponent(q)}&limit=8&country=SAU&lang=en`;
+      const json = await httpFetch(url, { 'x-country': 'SAU', 'x-language': 'en' });
+      const hits = json.hits || json.data?.hits || json.results || [];
+      if (!hits.length) throw new Error('no hits');
+      return hits.slice(0, 8).map(h => ({
+        name:  h.name || h.title || '',
+        price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
+        image: h.image_keys?.[0] ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg` : (h.image || ''),
+        url:   h.url ? `https://www.noon.com${h.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
   },
@@ -973,6 +1082,19 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
+    // Carrefour OCC REST API (SAP Spartacus — publicly accessible)
+    fetchApi: async (q) => {
+      const url = `https://www.carrefourksa.com/api/v2/mafkw/products/search?query=${encodeURIComponent(q)}&pageSize=8&lang=en&curr=SAR`;
+      const json = await httpFetch(url, { 'x-anonymous-consents': '[]' });
+      const products = json.products || [];
+      if (!products.length) throw new Error('no products');
+      return products.map(p => ({
+        name:  p.name || '',
+        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+        image: p.images?.[0]?.url ? `https://www.carrefourksa.com${p.images[0].url}` : '',
+        url:   p.url ? `https://www.carrefourksa.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
     waitFor: 'cx-product-grid-item, cx-product-card, .product-card, [class*="product"]',
   },
@@ -982,8 +1104,21 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
-    url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
-    waitFor: 'salla-product-card, .salla-product-card, .product-card',
+    // Panda runs on Salla platform — use their storefront search API
+    fetchApi: async (q) => {
+      const url = `https://panda.com.sa/api/products?keyword=${encodeURIComponent(q)}&limit=8&page=1`;
+      const json = await httpFetch(url, { Origin: 'https://panda.com.sa', Referer: 'https://panda.com.sa/' });
+      const items = json.data || json.products || json.items || [];
+      if (!Array.isArray(items) || !items.length) throw new Error('no items');
+      return items.map(p => ({
+        name:  p.name?.ar || p.name?.en || (typeof p.name === 'string' ? p.name : '') || p.title || '',
+        price: parseArabicPrice(p.price?.amount ?? p.regular_price ?? p.price ?? 0),
+        image: p.thumbnail || p.main_image || p.image?.url || '',
+        url:   p.url || p.slug ? `https://panda.com.sa/products/${p.slug || ''}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
+    url:  q => `https://panda.com.sa/search?q=${encodeURIComponent(q)}`,
+    waitFor: 'salla-product-card, .salla-product-card, [class*="salla-product"], .product-card',
   },
   {
     id:   'danube',
@@ -991,8 +1126,21 @@ const STORES = [
     ar:   'دانوب',
     emoji: '🔵',
     color: '#1d3557',
-    url:  q => `https://www.danube.com.sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .product, [class*="product"]',
+    // Danube uses a custom storefront — try their search/suggest endpoint
+    fetchApi: async (q) => {
+      const url = `https://www.danube.com.sa/api/catalog_product_search?q=${encodeURIComponent(q)}&limit=8`;
+      const json = await httpFetch(url, { Referer: 'https://www.danube.com.sa/' });
+      const items = json.products || json.data || json.items || [];
+      if (!Array.isArray(items) || !items.length) throw new Error('no items');
+      return items.map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price ?? 0),
+        image: p.image || p.thumbnail || '',
+        url:   p.url || p.product_url || '',
+      })).filter(p => p.name && p.price > 0);
+    },
+    url:  q => `https://www.danube.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
+    waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
   {
     id:   'lulu',
@@ -1000,8 +1148,21 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
+    // LuLu KSA uses a custom platform — try their product search API
+    fetchApi: async (q) => {
+      const url = `https://www.luluhypermarket.com/en-sa/search-suggest?q=${encodeURIComponent(q)}&limit=8`;
+      const json = await httpFetch(url, { Referer: 'https://www.luluhypermarket.com/' });
+      const items = json.products || json.data || json.suggestions || [];
+      if (!Array.isArray(items) || !items.length) throw new Error('no items');
+      return items.map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.final_price ?? p.final_price ?? p.price ?? 0),
+        image: p.image_url || p.image || p.thumbnail || '',
+        url:   p.url || p.product_url || '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-item, .product-card, li.product',
+    waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product-card"]',
   },
   {
     id:   'tamimi',
@@ -1009,8 +1170,22 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
+    // Tamimi is a Shopify store — use the public Predictive Search JSON API
+    fetchApi: async (q) => {
+      const url = `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[limit]=8`;
+      const json = await httpFetch(url, { 'X-Requested-With': 'XMLHttpRequest' });
+      const products = json.resources?.results?.products || [];
+      if (!products.length) throw new Error('no products');
+      return products.map(p => ({
+        name:  p.title || '',
+        // Shopify Predictive Search returns price as a formatted string like "SAR 25.50"
+        price: parseArabicPrice(String(p.price || '0').replace(/[^\d.٠-٩]/g, '')),
+        image: p.featured_image?.url || '',
+        url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
+    waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"], [class*="product-card"]',
   },
   {
     id:   'othaim',
@@ -1018,8 +1193,21 @@ const STORES = [
     ar:   'العثيم',
     emoji: '🟡',
     color: '#f4a261',
-    url:  q => `https://www.othaim.com.sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .product-item, .product',
+    // Othaim uses a custom platform — try their catalog search API
+    fetchApi: async (q) => {
+      const url = `https://www.othaim.com.sa/api/products/search?keyword=${encodeURIComponent(q)}&limit=8`;
+      const json = await httpFetch(url, { Referer: 'https://www.othaim.com.sa/' });
+      const items = json.products || json.data || json.results || [];
+      if (!Array.isArray(items) || !items.length) throw new Error('no items');
+      return items.map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price ?? 0),
+        image: p.image || p.thumbnail || '',
+        url:   p.url || '',
+      })).filter(p => p.name && p.price > 0);
+    },
+    url:  q => `https://www.othaim.com.sa/catalogsearch/result/?q=${encodeURIComponent(q)}`,
+    waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
   {
     id:   'bindawood',
@@ -1027,8 +1215,21 @@ const STORES = [
     ar:   'بن داود',
     emoji: '🟠',
     color: '#e76f51',
+    // Bindawood — try their search API
+    fetchApi: async (q) => {
+      const url = `https://www.bindawood.com/api/products/search?q=${encodeURIComponent(q)}&limit=8`;
+      const json = await httpFetch(url, { Referer: 'https://www.bindawood.com/' });
+      const items = json.products || json.data || json.items || [];
+      if (!Array.isArray(items) || !items.length) throw new Error('no items');
+      return items.map(p => ({
+        name:  p.name || p.title || '',
+        price: parseArabicPrice(p.price?.final ?? p.final_price ?? p.price ?? 0),
+        image: p.image || p.thumbnail || '',
+        url:   p.url || p.product_url || '',
+      })).filter(p => p.name && p.price > 0);
+    },
     url:  q => `https://www.bindawood.com/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .product-item, [class*="product"]',
+    waitFor: '.product-item-info, .product-item, li.product, .product-card, [class*="product"]',
   },
 ];
 
@@ -1036,6 +1237,22 @@ async function scrapeStore(store, query) {
   const result = { storeId: store.id, storeName: store.name, storeAr: store.ar,
                    storeEmoji: store.emoji, storeColor: store.color,
                    products: [], error: null };
+
+  // ── 1. Try direct HTTP API first (fastest, no bot-detection risk) ──
+  if (store.fetchApi) {
+    try {
+      const apiProducts = await store.fetchApi(query);
+      if (apiProducts.length > 0) {
+        result.products = apiProducts.slice(0, 8);
+        console.log(`[${store.id}] "${query}" → ${result.products.length} products (direct-API)`);
+        return result;
+      }
+    } catch (e) {
+      console.log(`[${store.id}] direct-API failed (${e.message}) → browser fallback`);
+    }
+  }
+
+  // ── 2. Browser-based fallback (Playwright + network interception) ──
   let page = null;
   const capturedApiProducts = [];
 
@@ -1043,16 +1260,16 @@ async function scrapeStore(store, query) {
     const browser = await getBrowser();
     page = await newPage(browser);
 
-    // ── Intercept JSON API responses before DOM scraping ──────
-    const SKIP_API = /\.(css|js|woff|png|jpg|svg|ico|gif|mp4)(\?|$)/i;
-    const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics/i;
+    // Intercept JSON API responses while page loads
+    const SKIP_EXT  = /\.(css|woff2?|ttf|eot|otf|png|jpg|jpeg|svg|ico|gif|mp4|mp3|webm)(\?|$)/i;
+    const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics|doubleclick/i;
 
     page.on('response', async (response) => {
       try {
         const url = response.url();
-        if (SKIP_API.test(url) || SKIP_HOST.test(url)) return;
+        if (SKIP_EXT.test(url) || SKIP_HOST.test(url)) return;
         const ct = response.headers()['content-type'] || '';
-        if (!ct.includes('json')) return;
+        if (!ct.includes('json') && !ct.includes('javascript')) return;
         const json = await response.json();
         const products = extractFromApiJson(json, store.id);
         if (products.length > 0) {
@@ -1062,25 +1279,28 @@ async function scrapeStore(store, query) {
       } catch (_) {}
     });
 
-    // Use 'load' so JS-rendered content is available; fall back on timeout
+    // Navigate — timeout is non-fatal (we may already have API data)
     await page.goto(store.url(query), {
       timeout: 28000,
-      waitUntil: 'load',
-    }).catch(() => {}); // page timeout is non-fatal — we may have API data
+      waitUntil: 'domcontentloaded',
+    }).catch(() => {});
 
-    // If API already gave us enough, skip DOM wait
+    // Wait for product elements or network to settle
     if (capturedApiProducts.length < 2) {
-      try {
-        await page.waitForSelector(store.waitFor, { timeout: 7000 });
-      } catch (_) {}
-      // Scroll mid-page to trigger lazy-loaded product grids
+      // Try to wait for product selector
+      await page.waitForSelector(store.waitFor, { timeout: 10000 }).catch(() => {});
+      // Simulate human scroll to trigger lazy-loaded grids
       await page.evaluate(() => {
-        window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'instant' });
+        window.scrollTo({ top: document.body.scrollHeight / 3, behavior: 'smooth' });
       }).catch(() => {});
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(800);
+      await page.evaluate(() => {
+        window.scrollTo({ top: document.body.scrollHeight * 2 / 3, behavior: 'smooth' });
+      }).catch(() => {});
+      await page.waitForTimeout(1200);
     }
 
-    // Prefer API-captured data; fall back to DOM extraction
+    // Prefer network-intercepted API data; fall back to DOM extraction
     if (capturedApiProducts.length >= 1) {
       result.products = capturedApiProducts
         .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i) // dedup
@@ -1088,7 +1308,21 @@ async function scrapeStore(store, query) {
     } else {
       result.products = await extractProducts(page, store.name);
     }
-    console.log(`[${store.id}] "${query}" → ${result.products.length} products${capturedApiProducts.length ? ' (API)' : ' (DOM)'}`);
+
+    const src = capturedApiProducts.length ? '(API)' : '(DOM)';
+    console.log(`[${store.id}] "${query}" → ${result.products.length} products ${src}`);
+
+    // Debug: on 0 results log the first 600 chars of HTML to help diagnose selectors
+    if (result.products.length === 0) {
+      try {
+        const html = await page.content();
+        const snippet = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                            .replace(/\s+/g, ' ')
+                            .slice(0, 600);
+        console.log(`[${store.id}] 0 results — HTML snippet: ${snippet}`);
+      } catch (_) {}
+    }
 
   } catch (err) {
     result.error = err.message.split('\n')[0];
