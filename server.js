@@ -1237,8 +1237,9 @@ const STORES = [
         url:   p.url ? `https://www.luluhypermarket.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
     },
-    // LuLu SAP Spartacus frontend URL — browser interception catches OCC API calls
-    url:       q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}&searchType=regular`,
+    // LuLu browser URL — avoid extra params that trigger Cloudflare WAF
+    // browser network interceptor catches the OCC API responses automatically
+    url:       q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
     waitUntil: 'networkidle',
     waitFor:   'cx-product-grid-item, cx-product-card, [class*="ProductCard"], .product-item, li.product',
   },
@@ -1361,11 +1362,14 @@ async function scrapeStore(store, query) {
     // Intercept JSON API responses while page loads
     const SKIP_EXT  = /\.(css|woff2?|ttf|eot|otf|png|jpg|jpeg|svg|ico|gif|mp4|mp3|webm)(\?|$)/i;
     const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics|doubleclick/i;
+    // Skip non-search API endpoints: recommendations, bestsellers, personalized, etc.
+    const SKIP_NONSEARCH = /recommendation|personalized|bestseller|discovery|trending|similar|related|sponsored/i;
 
     page.on('response', async (response) => {
       try {
         const url = response.url();
         if (SKIP_EXT.test(url) || SKIP_HOST.test(url)) return;
+        if (SKIP_NONSEARCH.test(url)) return; // skip homepage/recommendation APIs
         const ct = response.headers()['content-type'] || '';
         if (!ct.includes('json') && !ct.includes('javascript')) return;
         const json = await response.json();
@@ -1382,6 +1386,10 @@ async function scrapeStore(store, query) {
       await page.goto(store.warmupUrl, { timeout: 18000, waitUntil: 'domcontentloaded' }).catch(() => {});
       await page.waitForTimeout(1200 + Math.random() * 800);
 
+      // CRITICAL: discard products captured from the warmup homepage
+      // (recommendations / bestsellers are NOT search results for the user's query)
+      capturedApiProducts.length = 0;
+
       // Session API: after warmup we have valid cookies — try the JSON API directly
       // This bypasses bot detection because the request comes from a real browser session
       if (store.sessionApiUrl && capturedApiProducts.length === 0) {
@@ -1392,7 +1400,7 @@ async function scrapeStore(store, query) {
               'X-Requested-With': 'XMLHttpRequest',
               'Referer':         store.warmupUrl,
             },
-            timeout: 12000,
+            timeout: 20000,
             failOnStatusCode: false,
           });
           if (resp.ok()) {
