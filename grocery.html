@@ -86,6 +86,18 @@ html { scroll-behavior: smooth; }
   --fast: 0.15s;
   --med:  0.25s;
   --slow: 0.4s;
+
+  /* Legacy token aliases — keep old names working */
+  --green:        #00b14f;
+  --green-dark:   #007a36;
+  --green-mid:    #00c957;
+  --green-light:  #4ade80;
+  --green-pale:   #e6f9ee;
+  --surface-alt:  #f9fafb;
+  --text-muted:   #6b7280;
+  --text-faint:   #9ca3af;
+  --gold-pale:    #fef3c7;
+  --red-pale:     #fee2e2;
 }
 
 [data-theme="dark"] {
@@ -106,6 +118,14 @@ html { scroll-behavior: smooth; }
   --shadow:    0 4px 6px rgba(0,0,0,.5);
   --shadow-md: 0 8px 16px rgba(0,0,0,.6);
   --shadow-lg: 0 16px 32px rgba(0,0,0,.7);
+
+  /* Legacy aliases — dark overrides */
+  --green-pale:  rgba(0,177,79,.12);
+  --gold-pale:   rgba(245,158,11,.12);
+  --red-pale:    rgba(239,68,68,.12);
+  --surface-alt: #1c2128;
+  --text-muted:  #768390;
+  --text-faint:  #545d68;
 }
 
 /* old tokens removed — new tokens above */
@@ -436,7 +456,7 @@ main {
   background: var(--green-light);
   border-radius: 50%;
   margin: 0 2px;
-  animation: bounce-dot .8s var(--ease-in-out) infinite;
+  animation: bounce-dot .8s var(--ease) infinite;
 }
 .loading-dots span:nth-child(2) { animation-delay: .15s; }
 .loading-dots span:nth-child(3) { animation-delay: .3s; }
@@ -897,25 +917,7 @@ footer {
   pointer-events: none;
 }
 
-/* ── Language Toggle ────────────────────────────────────────────── */
-.lang-btn {
-  height: 30px;
-  padding: 0 .65rem;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,.3);
-  background: rgba(255,255,255,.12);
-  color: #fff;
-  font-size: .78rem;
-  font-weight: 700;
-  cursor: pointer;
-  letter-spacing: .03em;
-  transition: background var(--fast);
-  flex-shrink: 0;
-}
-.lang-btn:hover { background: rgba(255,255,255,.25); }
-
 /* ── RTL overrides ──────────────────────────────────────────────── */
-html[dir="rtl"] body { font-family: 'Tajawal', system-ui, sans-serif; }
 html[dir="rtl"] .header-inner { flex-direction: row-reverse; }
 html[dir="rtl"] .header-actions { margin-left: 0; margin-right: auto; }
 html[dir="rtl"] .search-btn { right: auto; left: 6px; }
@@ -1780,7 +1782,10 @@ applyTheme(savedTheme);
 
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
-  $('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+  const icon = t === 'dark' ? '☀️' : '🌙';
+  $('themeBtn').textContent = icon;
+  const mob = $('mobileThemeBtn');
+  if (mob) mob.textContent = icon;
   localStorage.setItem('gc_theme', t);
 }
 $('themeBtn').addEventListener('click', () => {
@@ -3047,9 +3052,10 @@ $('popularSearches').querySelectorAll('.ps-chip').forEach(btn => {
 </script>
 
 <!-- Mobile bottom bar -->
-<div class="mobile-bottom-bar">
-  <button onclick="document.getElementById('q') ? document.getElementById('q').focus() : document.getElementById('searchInput').focus()" style="flex:1;padding:.6rem;background:var(--green);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🔍 Search</button>
-  <button onclick="toggleBasket()" style="flex:1;padding:.6rem;background:var(--surface-alt);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🛒 Basket</button>
+<div class="mobile-bottom-bar" id="mobileBottomBar">
+  <button onclick="document.getElementById('searchInput').focus();document.getElementById('searchInput').select()" style="flex:1;padding:.6rem;background:var(--primary);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🔍 Search</button>
+  <button onclick="document.getElementById('themeBtn').click()" style="flex:1;padding:.6rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer" id="mobileThemeBtn">🌙</button>
+  <button onclick="document.getElementById('basketBtn').click()" style="flex:1;padding:.6rem;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:8px;font-weight:600;font-size:.9rem;cursor:pointer">🛍️ Basket</button>
 </div>
 </body>
 </html>
