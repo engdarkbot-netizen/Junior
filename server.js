@@ -1544,6 +1544,8 @@ app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
   if (!query) return res.status(400).json({ error: 'Missing query parameter ?q=' });
   if (query.length > MAX_QUERY_LEN) return res.status(400).json({ error: `Query too long (max ${MAX_QUERY_LEN} characters)` });
+  // Reject queries with HTML characters — grocery searches never need < or >
+  if (/[<>]/.test(query)) return res.status(400).json({ error: 'Invalid characters in query' });
 
   const key = normalizeQuery(query);
 
@@ -1870,6 +1872,9 @@ app.get('/api/stats', (req, res) => {
                        lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
                      })),
     stores,
+    demoMode:      DEMO_MODE,
+    demoReason:    DEMO_REASON,
+    alertsCount:   priceAlerts.size,
   });
 });
 
@@ -1913,6 +1918,14 @@ app.get('/api/logs', (req, res) => {
   const n = Math.min(parseInt(req.query.n || '50', 10), MAX_LOGS);
   res.json({ logs: recentLogs.slice(-n) });
 });
+
+/* ─── GET /api/version ──────────────────────────────────────────── */
+app.get('/api/version', (_, res) => res.json({
+  version:     '1.0.0',
+  env:         process.env.NODE_ENV || 'development',
+  nodeVersion: process.version,
+  platform:    process.platform,
+}));
 
 /* ─── JSON 404 for /api/* routes (must be after all api routes) ── */
 app.use('/api', (req, res) => {

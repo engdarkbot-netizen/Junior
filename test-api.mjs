@@ -4,7 +4,7 @@
  * Assumes server is running at http://localhost:3000
  */
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 const results = [];
 
@@ -699,54 +699,56 @@ async function main() {
   console.log('\n[2/18] Search validation');
   await testSearchValidation();
 
-  console.log('\n[3/18] Rate limiting');
-  await testRateLimiting();
-
-  console.log('\n[4/18] Demo/real search (milk)');
+  console.log('\n[3/18] Demo/real search (milk)');
   await testSearchMilk();
 
-  console.log('\n[5/18] Arabic search');
+  console.log('\n[4/18] Arabic search');
   await testArabicSearch();
 
-  console.log('\n[6/18] Cache');
+  console.log('\n[5/18] Cache');
   await testCache();
 
-  console.log('\n[7/18] Stats endpoint');
+  console.log('\n[6/18] Stats endpoint');
   await testStats();
 
-  console.log('\n[8/18] Trending');
+  console.log('\n[7/18] Trending');
   await testTrending();
 
-  console.log('\n[9/18] Price history');
+  console.log('\n[8/18] Price history');
   await testPriceHistory();
 
-  console.log('\n[10/18] Create alert');
+  console.log('\n[9/18] Create alert');
   await testCreateAlert();
 
-  console.log('\n[11/18] Get alerts');
+  console.log('\n[10/18] Get alerts');
   await testGetAlerts();
 
-  console.log('\n[12/18] Trending with limit');
+  console.log('\n[11/18] Trending with limit');
   await testTrendingWithLimit();
 
-  console.log('\n[13/18] SSE stream');
+  console.log('\n[12/18] SSE stream');
   await testSSEStream();
 
-  console.log('\n[14/18] Query sanitization');
+  console.log('\n[13/18] Query sanitization');
   await testQueryTooLong();
   await testQuerySanitization();
 
-  console.log('\n[15/18] Version endpoint');
+  console.log('\n[14/18] Version endpoint');
   await testVersion();
 
-  console.log('\n[16/18] Admin clear-cache');
+  console.log('\n[15/18] Admin clear-cache');
   await testAdminClearCache();
 
-  console.log('\n[17/18] Admin reset-analytics');
+  console.log('\n[16/18] Admin reset-analytics');
   await testAdminResetAnalytics();
 
-  console.log('\n[18/18] Stats extended fields');
+  console.log('\n[17/18] Stats extended fields');
   await testStatsExtended();
+
+  // Rate limiting must run LAST — it exhausts the rate limiter bucket deliberately,
+  // which would cause false 429 failures in any search test that follows.
+  console.log('\n[18/18] Rate limiting');
+  await testRateLimiting();
 
   // ─── Summary ───────────────────────────────────────────────────────────────
   console.log('\n' + '─'.repeat(60));

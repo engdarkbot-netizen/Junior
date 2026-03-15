@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "setup": "npx playwright install chromium",
-    "test": "node test-api.mjs"
+    "test": "node test-api.mjs",
+    "test:self": "node run-tests.mjs"
   },
   "repository": {
     "type": "git",
