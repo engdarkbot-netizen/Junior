@@ -292,16 +292,19 @@ if (process.env.FORCE_DEMO === '1' || process.env.FORCE_DEMO === 'true') {
   console.log('⚠️  FORCE_DEMO=1 — running in DEMO MODE');
 }
 
-if (!PROXY_URL) {
+const DISABLE_DEMO = process.env.DISABLE_DEMO === '1' || process.env.DISABLE_DEMO === 'true';
+
+if (!PROXY_URL && !DISABLE_DEMO) {
   DEMO_MODE = true;
   DEMO_REASON = 'no_proxy';
   console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
 } else {
-  // Only test browser when a proxy is configured and scraping may work
+  // Test browser availability
   (async () => {
     try {
-      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'], executablePath: process.env.CHROMIUM_PATH || undefined });
       await testBrowser.close();
+      console.log('✅  Browser ready — running in LIVE SCRAPE MODE');
     } catch (_) {
       DEMO_MODE = true;
       DEMO_REASON = 'browser_unavailable';
@@ -614,6 +617,7 @@ async function getBrowser() {
         '--disable-gpu',
         '--no-zygote',
       ],
+      executablePath: process.env.CHROMIUM_PATH || undefined,
     });
   }
   return browserInstance;
