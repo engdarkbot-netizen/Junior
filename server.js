@@ -1568,9 +1568,9 @@ app.get('/api/debug-search', async (req, res) => {
 app.get('/api/self-test', async (req, res) => {
   const query = (req.query.q || 'حليب المراعي').trim();
   const started = Date.now();
-  const storeResults = [];
 
-  for (const store of STORES) {
+  // Run all stores in parallel with a 25s cap per store to avoid hanging
+  const storeResults = await Promise.all(STORES.map(async store => {
     const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
     const epResults = [];
     let gotProducts = [];
@@ -1591,10 +1591,10 @@ app.get('/api/self-test', async (req, res) => {
       }
     }
 
-    storeResults.push({ store: store.id, name: store.name, directOk: store.directOk || false,
-                        endpoints: epResults, totalFound: gotProducts.length,
-                        sample: gotProducts.slice(0, 2) });
-  }
+    return { store: store.id, name: store.name, directOk: store.directOk || false,
+             endpoints: epResults, totalFound: gotProducts.length,
+             sample: gotProducts.slice(0, 2) };
+  }));
 
   res.json({
     query,
