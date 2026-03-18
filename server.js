@@ -600,37 +600,54 @@ async function runDemoScrape(query) {
 }
 
 /* ─── Playwright API request context (lightweight proxy-aware HTTP) */
-let _apiCtx = null;
+let _apiCtx     = null; // uses proxy when configured
+let _apiCtxDirect = null; // always direct (no proxy) for geo-unrestricted endpoints
 
-async function getApiCtx() {
-  if (_apiCtx) return _apiCtx;
-  const opts = {
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-               '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    extraHTTPHeaders: {
-      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Accept':          'application/json, text/plain, */*',
-    },
-    ignoreHTTPSErrors: true,
-  };
-  if (PROXY_URL) {
-    opts.proxy = {
-      server:   PROXY_URL,
-      username: PROXY_USER || undefined,
-      password: PROXY_PASS || undefined,
-    };
+const BASE_HEADERS = {
+  'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept':          'application/json, text/plain, */*',
+};
+const BASE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+                '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+
+async function getApiCtx(useProxy = true) {
+  // Return proxy context when proxy is configured AND requested
+  if (useProxy && PROXY_URL) {
+    if (!_apiCtx) {
+      _apiCtx = await playwrightRequest.newContext({
+        userAgent: BASE_UA,
+        extraHTTPHeaders: BASE_HEADERS,
+        ignoreHTTPSErrors: true,
+        proxy: { server: PROXY_URL, username: PROXY_USER||undefined, password: PROXY_PASS||undefined },
+      });
+    }
+    return _apiCtx;
   }
-  _apiCtx = await playwrightRequest.newContext(opts);
-  return _apiCtx;
+  // Direct context (no proxy) — for globally accessible APIs like Shopify, OCC
+  if (!_apiCtxDirect) {
+    _apiCtxDirect = await playwrightRequest.newContext({
+      userAgent: BASE_UA,
+      extraHTTPHeaders: BASE_HEADERS,
+      ignoreHTTPSErrors: true,
+    });
+  }
+  return _apiCtxDirect;
 }
 
-async function fetchJsonApi(url, extraHeaders = {}) {
+// directOk=true: try direct first (globally-accessible APIs), then proxy on failure
+async function fetchJsonApi(url, extraHeaders = {}, directOk = false) {
+  // Try direct connection for globally-accessible endpoints (faster, proxy-independent)
+  if (directOk) {
+    try {
+      const ctx  = await getApiCtx(false);
+      const resp = await ctx.get(url, { headers: extraHeaders, timeout: 15000 });
+      if (resp.ok()) return await resp.json().catch(() => null);
+    } catch (_) {}
+    // fall through to proxy attempt
+  }
   try {
-    const ctx = await getApiCtx();
-    const resp = await ctx.get(url, {
-      headers: extraHeaders,
-      timeout: 20000,
-    });
+    const ctx  = await getApiCtx(true);
+    const resp = await ctx.get(url, { headers: extraHeaders, timeout: 20000 });
     if (!resp.ok()) {
       console.log(`[api] ${resp.status()} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
       return null;
@@ -1159,7 +1176,8 @@ const STORES = [
     emoji: '🔴',
     color: '#003087',
     // SAP Hybris/Commerce Cloud OCC v2 — mafsau = MAF Saudi Arabia baseSiteId
-    // No auth required for anonymous product search
+    // No auth required for anonymous product search; directOk=globally accessible
+    directOk: true,
     apiUrls: [
       { url: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
         headers: { 'Accept': 'application/json' } },
@@ -1219,7 +1237,8 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
-    // Shopify Storefront API — no auth required, proxy-friendly
+    // Shopify Storefront API — no auth, globally accessible (no proxy needed)
+    directOk: true,
     apiUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
     apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
@@ -1263,7 +1282,7 @@ async function scrapeStore(store, query) {
     const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
     const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
     try {
-      const json = await fetchJsonApi(urlFn(query), headers);
+      const json = await fetchJsonApi(urlFn(query), headers, store.directOk || false);
       if (json) {
         const products = extractFromApiJson(json, store.id);
         if (products.length > 0) {
@@ -1497,7 +1516,7 @@ app.get('/api/debug-search', async (req, res) => {
       const apiUrl = urlFn(query);
       const t1 = Date.now();
       try {
-        const json = await fetchJsonApi(apiUrl, headers);
+        const json = await fetchJsonApi(apiUrl, headers, s.directOk || false);
         if (json) {
           const products = extractFromApiJson(json, s.id);
           apiTests.push({ url: apiUrl.split('?')[0], count: products.length, ms: Date.now()-t1, status: 'ok' });
