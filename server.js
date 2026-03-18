@@ -1069,9 +1069,21 @@ function extractFromApiJson(json, storeId) {
       return 0;
     }
     const candidates = [];
+    // Also scan all numeric values in an object looking for anything 0.5–5000 SAR
+    function scanForPrice(obj) {
+      if (typeof obj === 'number' && obj > 0.5 && obj < 5000) return obj;
+      if (typeof obj === 'string') { const n = parseArabicPrice(obj); if (n > 0.5 && n < 5000) return n; }
+      if (obj && typeof obj === 'object') {
+        for (const v of Object.values(obj)) {
+          const n = scanForPrice(v);
+          if (n) return n;
+        }
+      }
+      return 0;
+    }
     function walkJson(node, depth = 0) {
       if (depth > 6 || candidates.length >= 10) return;
-      if (Array.isArray(node) && node.length >= 1) {
+      if (Array.isArray(node) && node.length >= 2) {
         const first = node[0];
         if (first && typeof first === 'object') {
           const hasName  = NAME_KEYS.some(k => k in first);
@@ -1082,11 +1094,25 @@ function extractFromApiJson(json, storeId) {
               const price = pickPrice(p);
               if (name && price > 0) candidates.push({
                 name, price,
-                image: p.image || p.thumbnail || p.img || p.photo || p.picture || '',
-                url:   p.url   || p.link    || p.href || p.slug   || '',
+                image: p.image || p.thumbnail || p.img || p.photo || p.picture || p.imageUrl || p.image_url || '',
+                url:   p.url   || p.link    || p.href || p.slug   || p.productUrl || p.product_url || '',
               });
             });
             return;
+          }
+          // Second pass: try scanning even without recognised field names
+          // (catches stores with unusual keys like 'commodity_name', 'itm_price', etc.)
+          if (hasName || Object.keys(first).length >= 3) {
+            let hitCount = 0;
+            node.slice(0, 10).forEach(p => {
+              const name  = pickName(p);
+              const price = pickPrice(p) || scanForPrice(p);
+              if (name && price > 0 && price < 5000) { candidates.push({ name, price,
+                image: p.image || p.thumbnail || p.img || '',
+                url:   p.url   || p.link    || p.slug || '',
+              }); hitCount++; }
+            });
+            if (hitCount > 0) return;
           }
         }
       }
