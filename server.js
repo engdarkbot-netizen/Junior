@@ -1164,19 +1164,21 @@ async function scrapeStore(store, query) {
       console.log(`[${store.id}] goto timed out / failed: ${e.message.split('\n')[0]}`);
     });
 
-    // Wait for SPA JS to initialize and fire search API calls
-    await page.waitForTimeout(3000);
+    // Wait for network to go idle (all XHR/fetch calls complete) — more reliable
+    // than a fixed timeout: proceeds fast if API calls finish in 1s, waits up to
+    // 12s if they're slow through the proxy
+    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
 
     // If XHR already gave us products, skip DOM wait
     if (capturedApiProducts.length < 2) {
       try {
-        await page.waitForSelector(store.waitFor, { timeout: 8000 });
+        await page.waitForSelector(store.waitFor, { timeout: 6000 });
       } catch (_) {}
       // Scroll to trigger lazy-loaded product grids
       await page.evaluate(() => {
         window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'instant' });
       }).catch(() => {});
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(1500);
     }
 
     // Prefer XHR-captured data; fall back to DOM extraction
