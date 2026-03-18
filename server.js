@@ -1328,8 +1328,11 @@ async function scrapeStore(store, query) {
 
     // domcontentloaded is faster than 'load' — avoids waiting for every
     // image/font through the proxy before we can check for products
+    // Shorter goto timeout when no proxy: Saudi sites from US fail fast (no route)
+    // vs. proxy path where 40s allows slow proxy connections to complete
+    const gotoTimeout = PROXY_URL ? 40000 : 22000;
     await page.goto(store.url(query), {
-      timeout: 40000,
+      timeout: gotoTimeout,
       waitUntil: 'domcontentloaded',
     }).catch(e => {
       console.log(`[${store.id}] goto timed out / failed: ${e.message.split('\n')[0]}`);
@@ -1338,12 +1341,13 @@ async function scrapeStore(store, query) {
     // Wait for network to go idle (all XHR/fetch calls complete) — more reliable
     // than a fixed timeout: proceeds fast if API calls finish in 1s, waits up to
     // 12s if they're slow through the proxy
-    await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
+    const idleTimeout = PROXY_URL ? 12000 : 6000;
+    await page.waitForLoadState('networkidle', { timeout: idleTimeout }).catch(() => {});
 
     // If XHR already gave us products, skip DOM wait
     if (capturedApiProducts.length < 2) {
       try {
-        await page.waitForSelector(store.waitFor, { timeout: 8000 });
+        await page.waitForSelector(store.waitFor, { timeout: PROXY_URL ? 8000 : 4000 });
       } catch (_) {}
       // Scroll to trigger lazy-loaded product grids
       await page.evaluate(() => {
