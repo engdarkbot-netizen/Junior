@@ -623,7 +623,7 @@ async function newPage(browser) {
   const contextOptions = {
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 },
     locale: 'ar-SA',                     // appear as Saudi visitor
     timezoneId: 'Asia/Riyadh',
@@ -1006,6 +1006,7 @@ const STORES = [
     emoji: '🏪',
     color: '#457b9d',
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
+    lightUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
     waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
   },
   {
@@ -1039,6 +1040,26 @@ async function scrapeStore(store, query) {
     const browser = await getBrowser();
     page = await newPage(browser);
 
+    // ── Fast path: direct JSON API for stores that expose one ─
+    if (store.lightUrl) {
+      try {
+        const resp = await page.goto(store.lightUrl(query), { timeout: 15000, waitUntil: 'domcontentloaded' });
+        if (resp && resp.ok()) {
+          const json = await resp.json().catch(() => null);
+          if (json) {
+            const products = extractFromApiJson(json, store.id);
+            if (products.length > 0) {
+              result.products = products.slice(0, 8);
+              console.log(`[${store.id}] "${query}" → ${result.products.length} products (direct API)`);
+              return result;
+            }
+          }
+        }
+      } catch (_) {
+        console.log(`[${store.id}] lightUrl failed, falling through to browser scrape`);
+      }
+    }
+
     // ── Intercept JSON API responses before DOM scraping ──────
     const SKIP_API = /\.(css|js|woff|png|jpg|svg|ico|gif|mp4)(\?|$)/i;
     const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics/i;
@@ -1058,11 +1079,15 @@ async function scrapeStore(store, query) {
       } catch (_) {}
     });
 
-    // Use 'load' so JS-rendered content is available; fall back on timeout
+    // Use domcontentloaded (not 'load') — avoids waiting 28s for images/fonts
+    // through the proxy before we can check for products
     await page.goto(store.url(query), {
-      timeout: 28000,
-      waitUntil: 'load',
+      timeout: 35000,
+      waitUntil: 'domcontentloaded',
     }).catch(() => {}); // page timeout is non-fatal — we may have API data
+
+    // Give JS time to initialize and fire search API calls
+    await page.waitForTimeout(2500);
 
     // If API already gave us enough, skip DOM wait
     if (capturedApiProducts.length < 2) {
@@ -1107,10 +1132,15 @@ async function runScrape(query) {
 
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
-  // If no products found from any store (likely bot-blocked), fall back to demo
-  if (totalProducts === 0) {
-    console.log(`[scrape] No products found for "${query}" — falling back to demo data`);
+  // Only fall back to demo when no proxy is configured (datacenter IPs are always blocked).
+  // When a proxy IS set, return real (possibly empty) results — silent demo fallback hides
+  // proxy/scraping errors that need to be diagnosed.
+  if (totalProducts === 0 && !PROXY_URL) {
+    console.log(`[scrape] No products found for "${query}" — no proxy configured, using demo data`);
     return runDemoScrape(query);
+  }
+  if (totalProducts === 0) {
+    console.log(`[scrape] No products found for "${query}" — proxy configured but all stores returned 0. Check /api/test-proxy`);
   }
 
   return {
@@ -1148,6 +1178,30 @@ function checkPriceAlerts(nKey, stores) {
 app.get('/api/ping', (_req, res) => {
   res.setHeader('Content-Type', 'text/plain');
   res.send('pong');
+});
+
+/* ─── GET /api/test-proxy — verify proxy routing ───────────────── */
+app.get('/api/test-proxy', async (_req, res) => {
+  if (!PROXY_URL) {
+    return res.json({ ok: false, error: 'No PROXY_URL configured', proxy: null });
+  }
+  let page = null;
+  try {
+    const browser = await getBrowser();
+    page = await newPage(browser);
+    const resp = await page.goto('https://api.ipify.org?format=json', {
+      timeout: 20000,
+      waitUntil: 'domcontentloaded',
+    });
+    const json = await resp.json();
+    const safePrxoy = PROXY_URL.replace(/:[^:@]*@/, ':***@');
+    res.json({ ok: true, ip: json.ip, proxy: safePrxoy });
+  } catch (err) {
+    const safeProxy = PROXY_URL.replace(/:[^:@]*@/, ':***@');
+    res.json({ ok: false, error: err.message.split('\n')[0], proxy: safeProxy });
+  } finally {
+    if (page) await page.context().close().catch(() => {});
+  }
 });
 
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
@@ -1249,10 +1303,10 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     ));
     allResults.push(...results);
 
-    // If all stores came back empty, replace results with demo data
+    // Only fall back to demo when no proxy is configured
     const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
-    if (totalProducts === 0) {
-      console.log(`[stream] No products found for "${query}" — falling back to demo data`);
+    if (totalProducts === 0 && !PROXY_URL) {
+      console.log(`[stream] No products found for "${query}" — no proxy configured, using demo data`);
       for (let i = 0; i < allResults.length; i++) {
         allResults[i] = {
           ...allResults[i],
@@ -1261,6 +1315,8 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
         };
       }
       usedDemoFallback = true;
+    } else if (totalProducts === 0) {
+      console.log(`[stream] No products found for "${query}" — proxy configured but all stores returned 0`);
     }
   }
 
