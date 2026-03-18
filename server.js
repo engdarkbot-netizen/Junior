@@ -937,12 +937,16 @@ function extractFromApiJson(json, storeId) {
     // ── Carrefour (SAP Hybris OCC v2) ────────────────────────
     if (storeId === 'carrefour') {
       const products = json.products || json.data?.products || [];
-      if (products.length) return products.slice(0, 10).map(p => ({
-        name:  p.name || '',
-        price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
-        image: p.images?.[0]?.url || p.image?.url || '',
-        url:   p.url ? `https://www.carrefourksa.com${p.url}` : (p.code ? `https://www.carrefourksa.com/mafsau/en/p/${p.code}` : ''),
-      })).filter(p => p.name && p.price > 0);
+      if (products.length) return products.slice(0, 10).map(p => {
+        const rawImg = p.images?.[0]?.url || p.image?.url || '';
+        const image  = rawImg.startsWith('http') ? rawImg : (rawImg ? `https://www.carrefourksa.com${rawImg}` : '');
+        return {
+          name:  p.name || '',
+          price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
+          image,
+          url:   p.url ? `https://www.carrefourksa.com${p.url}` : (p.code ? `https://www.carrefourksa.com/mafsau/en/p/${p.code}` : ''),
+        };
+      }).filter(p => p.name && p.price > 0);
     }
 
     // ── Tamimi (Shopify) ─────────────────────────────────────
@@ -1154,9 +1158,14 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
-    // SAP Hybris OCC v2 — standard endpoint, no auth needed for search
-    apiUrl: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
-    apiHeaders: { 'Accept': 'application/json' },
+    // SAP Hybris/Commerce Cloud OCC v2 — mafsau = MAF Saudi Arabia baseSiteId
+    // No auth required for anonymous product search
+    apiUrls: [
+      { url: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
+        headers: { 'Accept': 'application/json' } },
+      { url: q => `https://www.carrefourksa.com/occ/v2/mafsau/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
+        headers: { 'Accept': 'application/json' } },
+    ],
     url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
     waitFor: 'cx-product-grid-item, cx-product-card, .product-card, [class*="product"]',
   },
