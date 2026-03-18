@@ -1481,6 +1481,9 @@ app.get('/api/stats', (req, res) => {
                        lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
                      })),
     stores,
+    demoMode:    DEMO_MODE,
+    demoReason:  DEMO_REASON,
+    alertsCount: priceAlerts.size,
   });
 });
 
@@ -1518,6 +1521,16 @@ app.get('/api/health', (_, res) => res.json({
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),
 }));
+
+/* ─── GET /api/version — runtime info ──────────────────────────── */
+app.get('/api/version', (_req, res) => {
+  res.json({
+    version:     require('./package.json').version,
+    env:         process.env.NODE_ENV || 'development',
+    nodeVersion: process.version,
+    platform:    process.platform,
+  });
+});
 
 /* ─── Recent logs ───────────────────────────────────────────────── */
 app.get('/api/logs', (req, res) => {
