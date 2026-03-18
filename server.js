@@ -292,23 +292,20 @@ if (process.env.FORCE_DEMO === '1' || process.env.FORCE_DEMO === 'true') {
   console.log('⚠️  FORCE_DEMO=1 — running in DEMO MODE');
 }
 
-if (!PROXY_URL) {
-  DEMO_MODE = true;
-  DEMO_REASON = 'no_proxy';
-  console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
-} else {
-  // Only test browser when a proxy is configured and scraping may work
-  (async () => {
-    try {
-      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-      await testBrowser.close();
-    } catch (_) {
-      DEMO_MODE = true;
-      DEMO_REASON = 'browser_unavailable';
-      console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+// Always test browser availability (proxy is optional — direct JSON APIs work globally)
+(async () => {
+  try {
+    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    await testBrowser.close();
+    if (!PROXY_URL) {
+      console.log('✅  Browser available. No PROXY_URL — browser scraping skipped, using direct JSON APIs only');
     }
-  })();
-}
+  } catch (_) {
+    DEMO_MODE = true;
+    DEMO_REASON = 'browser_unavailable';
+    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+  }
+})();
 
 // Each category entry: keywords (Arabic/English) that map to its products
 const DEMO_CATALOG = [
@@ -1637,40 +1634,39 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   const allResults = [];
 
   if (DEMO_MODE) {
-    // In demo mode, try direct-API stores first (work globally without proxy)
+    // DEMO_MODE is only true when Chromium is completely unavailable (not just no proxy)
+    // Even then, try direct JSON API stores — they don't need a browser
     const apiStores    = STORES.filter(s => s.apiUrl || s.apiUrls?.length);
     const nonApiStores = STORES.filter(s => !s.apiUrl && !s.apiUrls?.length);
     let realCount = 0;
 
-    // Run direct-API stores in parallel
     const apiResults = await Promise.all(apiStores.map(async store => {
       const r = await scrapeStore(store, query);
       const isReal = r.products.length > 0;
       if (isReal) realCount++;
-      const products = isReal ? r.products : getDemoProducts(query, store.id);
+      // Never serve fake demo data — show empty if real scraping failed
       const storeData = { id: store.id, name: store.name, ar: store.ar,
-                          emoji: store.emoji, color: store.color, products,
-                          isReal, error: r.error };
+                          emoji: store.emoji, color: store.color,
+                          products: r.products, isReal, error: r.error };
       write('store', storeData);
       return storeData;
     }));
     allResults.push(...apiResults);
 
-    // Stream demo results for non-API stores with realistic delays
+    // Non-API stores can't be scraped without browser — show as unavailable
     for (const store of nonApiStores) {
-      await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
       const storeData = {
         id: store.id, name: store.name, ar: store.ar,
         emoji: store.emoji, color: store.color,
-        products: getDemoProducts(query, store.id), isReal: false, error: null,
+        products: [], isReal: false, error: 'Browser unavailable',
       };
       write('store', storeData);
       allResults.push(storeData);
     }
 
-    // Set partial mode if some stores returned real prices
     if (realCount > 0 && realCount < STORES.length) usedDemoFallback = 'partial';
-    else if (realCount === STORES.length) usedDemoFallback = false; // all real, clear demo
+    else if (realCount === STORES.length) usedDemoFallback = false;
+    else usedDemoFallback = false; // all empty but no fake data
   } else {
     const results = await Promise.all(STORES.map(store =>
       scrapeStore(store, query).then(sr => {
@@ -1689,46 +1685,14 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     ));
     allResults.push(...results);
 
-    // Only fall back to demo when no proxy is configured
     const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
-    if (totalProducts === 0 && !PROXY_URL) {
-      console.log(`[stream] No products found for "${query}" — no proxy configured, using demo data`);
-      for (let i = 0; i < allResults.length; i++) {
-        allResults[i] = {
-          ...allResults[i],
-          products: getDemoProducts(query, allResults[i].id),
-          error: null,
-        };
-      }
-      usedDemoFallback = true;
-    } else if (totalProducts === 0) {
-      console.log(`[stream] No products found for "${query}" — proxy configured but all stores returned 0`);
+    if (totalProducts === 0) {
+      console.log(`[stream] No products found for "${query}" — all stores returned 0 (${PROXY_URL ? 'proxy configured' : 'no proxy, direct APIs only'})`);
     }
   }
 
-  // Compute final demo flag:
-  // - 'partial' if some stores have real prices, some have demo
-  // - true if all stores are demo data
-  // - undefined if all stores have real prices
-  // Determine final demo flag based on actual results:
-  // false/undefined = all real; 'partial' = some real some demo; true = all demo
-  let demoFlag;
-  if (usedDemoFallback === false) {
-    demoFlag = undefined; // all real prices (overrides DEMO_MODE)
-  } else if (usedDemoFallback === 'partial') {
-    demoFlag = 'partial';
-  } else if (usedDemoFallback === true) {
-    demoFlag = true;
-  } else if (DEMO_MODE) {
-    // usedDemoFallback not set (non-demo path didn't run); DEMO_MODE was true
-    // but we ran scrapeStore for all stores anyway — determine from results
-    const realCount2 = allResults.filter(s => s.isReal || (s.products?.length > 0 && !s.products?.every(p => p._demo))).length;
-    if (realCount2 === 0) demoFlag = true;
-    else if (realCount2 < STORES.length) demoFlag = 'partial';
-    else demoFlag = undefined;
-  } else {
-    demoFlag = undefined;
-  }
+  // Never serve fake demo data — always real prices or empty
+  const demoFlag = undefined;
   const finalData = { query, timestamp: new Date().toISOString(), demo: demoFlag, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults, query);
