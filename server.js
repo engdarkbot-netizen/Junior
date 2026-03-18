@@ -111,6 +111,35 @@ app.get('/', (req, res) => {
 });
 app.use(express.static(path.join(__dirname)));
 
+/* ─── In-memory savings counter (social proof) ─────────────────── */
+let totalSavingsDisplayed = 0;
+let totalSearches = 0;
+
+/* ─── GET /manifest.json — PWA manifest ────────────────────────── */
+app.get('/manifest.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.json({
+    name: 'جونيور — أسعار المواد الغذائية',
+    short_name: 'جونيور',
+    description: 'قارن أسعار البقالة في 8 متاجر سعودية',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#0f5132',
+    theme_color: '#0f5132',
+    lang: 'ar',
+    dir: 'rtl',
+    icons: [
+      { src: 'https://placehold.co/192x192/0f5132/white?text=J', sizes: '192x192', type: 'image/png' },
+      { src: 'https://placehold.co/512x512/0f5132/white?text=J', sizes: '512x512', type: 'image/png' },
+    ],
+  });
+});
+
+/* ─── GET /api/stats/savings — savings social proof counter ─────── */
+app.get('/api/stats/savings', (req, res) => {
+  res.json({ totalSavings: Math.round(totalSavingsDisplayed * 100) / 100, searches: totalSearches });
+});
+
 /* ─── In-memory search cache (15-minute TTL, max 150 entries) ──── */
 const CACHE_TTL = 15 * 60 * 1000;
 const CACHE_MAX = 150;
@@ -527,10 +556,13 @@ const STORE_VARIANCE = {
   bindawood: +0.01,
 };
 
-// Build a normalized lookup so "أرز" key matches normalized query "ارز"
-const DEMO_PRODUCTS_NORMALIZED = Object.fromEntries(
-  Object.entries(DEMO_PRODUCTS).map(([k, v]) => [normalizeQuery(k), v])
-);
+// Build a normalized keyword→products lookup from DEMO_CATALOG
+const DEMO_PRODUCTS_NORMALIZED = { default: DEMO_DEFAULT };
+for (const entry of DEMO_CATALOG) {
+  for (const kw of entry.keywords) {
+    DEMO_PRODUCTS_NORMALIZED[normalizeQuery(kw)] = entry.products;
+  }
+}
 
 function getDemoProducts(query, storeId) {
   const key = normalizeQuery(query);
@@ -540,7 +572,6 @@ function getDemoProducts(query, storeId) {
     if (normKey === 'default') continue;
     if (key.includes(normKey) || normKey.includes(key)) { products = v; break; }
   }
-  const products = bestCategory ? bestCategory.products : DEMO_DEFAULT;
   const variance = STORE_VARIANCE[storeId] || 0;
   return products.map(p => ({
     ...p,
@@ -1333,6 +1364,16 @@ app.get('/api/basket', rateLimit, async (req, res) => {
       return a.total - b.total;
     });
 
+  // Track savings for social proof counter
+  totalSearches++;
+  const completedStores = stores.filter(s => s.missing === 0 && s.total > 0);
+  if (completedStores.length >= 2) {
+    const highestTotal = Math.max(...completedStores.map(s => s.total));
+    const lowestTotal  = Math.min(...completedStores.map(s => s.total));
+    const savings = highestTotal - lowestTotal;
+    if (savings > 0) totalSavingsDisplayed += savings;
+  }
+
   res.json({ queries, stores, timestamp: new Date().toISOString() });
 });
 
@@ -1440,6 +1481,9 @@ app.get('/api/stats', (req, res) => {
                        lastSearched: new Date(analytics.queryLastSeen.get(nKey) || Date.now()).toISOString(),
                      })),
     stores,
+    demoMode:    DEMO_MODE,
+    demoReason:  DEMO_REASON,
+    alertsCount: priceAlerts.size,
   });
 });
 
@@ -1477,6 +1521,16 @@ app.get('/api/health', (_, res) => res.json({
   proxy: PROXY_URL ? 'configured' : 'none',
   timestamp: new Date().toISOString(),
 }));
+
+/* ─── GET /api/version — runtime info ──────────────────────────── */
+app.get('/api/version', (_req, res) => {
+  res.json({
+    version:     require('./package.json').version,
+    env:         process.env.NODE_ENV || 'development',
+    nodeVersion: process.version,
+    platform:    process.platform,
+  });
+});
 
 /* ─── Recent logs ───────────────────────────────────────────────── */
 app.get('/api/logs', (req, res) => {
