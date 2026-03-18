@@ -1230,7 +1230,8 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
-    // LuLu — try Oracle Commerce Cloud and Magento-style endpoints
+    // LuLu — Oracle Commerce Cloud OCC API (try direct, then proxy)
+    directOk: true,
     apiUrls: [
       { url: q => `https://www.luluhypermarket.com/ccstoreui/v1/search?Nrpp=20&Ntt=${encodeURIComponent(q)}&lang=en&country=SA`,
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
