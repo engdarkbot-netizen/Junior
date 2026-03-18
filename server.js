@@ -938,16 +938,22 @@ function extractFromApiJson(json, storeId) {
   try {
     // ── Noon ──────────────────────────────────────────────────
     if (storeId === 'noon') {
-      // Direct API response: { hits: [...] } or nested
+      // Multiple possible shapes from Noon's internal API + XHR intercept
       const hits = json.hits || json.data?.hits || json.results?.hits
-                || json.searchResult?.hits || [];
-      if (hits.length) return hits.slice(0, 10).map(h => ({
-        name:  h.name || h.title || h.display_name || '',
-        price: parseArabicPrice(h.sale_price ?? h.price?.sale_price ?? h.price ?? 0),
+                || json.searchResult?.hits
+                || json.data?.products || json.products
+                || json.data?.items   || json.items
+                || json.data?.results || json.results
+                || [];
+      const arr = Array.isArray(hits) ? hits : [];
+      if (arr.length) return arr.slice(0, 10).map(h => ({
+        name:  h.name || h.title || h.display_name || h.displayName || '',
+        price: parseArabicPrice(h.sale_price ?? h.price?.sale_price ?? h.price?.amount ?? h.price ?? 0),
         image: h.image_keys?.[0]
           ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg`
-          : (h.image || h.thumbnail || ''),
-        url: h.url ? `https://www.noon.com${h.url}` : (h.sku ? `https://www.noon.com/saudi-en/${h.sku}/` : ''),
+          : (h.image_url || h.image || h.thumbnail || h.img || ''),
+        url: h.url ? (h.url.startsWith('http') ? h.url : `https://www.noon.com${h.url}`)
+                   : (h.sku ? `https://www.noon.com/saudi-en/${h.sku}/` : ''),
       })).filter(p => p.name && p.price > 0);
     }
 
