@@ -960,28 +960,80 @@ function extractFromApiJson(json, storeId) {
       })).filter(p => p.name && p.price > 0);
     }
 
-    // ── Panda (Salla) ────────────────────────────────────────
+    // ── Panda (Salla REST API) ───────────────────────────────
     if (storeId === 'panda') {
       const products = json.data || json.products || json.items || [];
       if (Array.isArray(products) && products.length) {
         return products.slice(0, 10).map(p => ({
           name:  p.name?.ar || p.name?.en || p.name || p.title || '',
-          price: parseArabicPrice(p.price?.amount ?? p.price ?? 0),
-          image: p.thumbnail || p.image?.url || '',
-          url:   p.url || p.slug || '',
+          price: parseArabicPrice(p.price?.amount ?? p.price?.regular?.amount ?? p.price ?? 0),
+          image: p.thumbnail || p.main_image?.url || p.image?.url || '',
+          url:   p.url ? `https://www.panda.com.sa${p.url}` : (p.slug ? `https://www.panda.com.sa/en/product/${p.slug}` : ''),
         })).filter(p => p.name && p.price > 0);
       }
     }
 
-    // ── Danube ───────────────────────────────────────────────
+    // ── Danube (Shopify suggest.json) ────────────────────────
     if (storeId === 'danube') {
-      const products = json.products || json.data?.products || json.items || [];
-      if (Array.isArray(products) && products.length) {
-        return products.slice(0, 10).map(p => ({
+      // Shopify suggest.json format
+      const shopifyProducts = json.resources?.results?.products || json.products || json.items || [];
+      if (Array.isArray(shopifyProducts) && shopifyProducts.length) {
+        return shopifyProducts.slice(0, 10).map(p => ({
+          name:  p.title || p.name || '',
+          price: parseArabicPrice(p.price),
+          image: p.image || p.featured_image || '',
+          url:   p.url ? `https://www.danube.com.sa${p.url}` : '',
+        })).filter(p => p.name && p.price > 0);
+      }
+      // Non-Shopify fallback
+      const altProducts = json.data?.products || [];
+      if (Array.isArray(altProducts) && altProducts.length) {
+        return altProducts.slice(0, 10).map(p => ({
           name:  p.name || p.title || '',
           price: parseArabicPrice(p.price?.final_price ?? p.price ?? 0),
           image: p.image || p.thumbnail || '',
           url:   p.url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── LuLu (Oracle Commerce Cloud) ─────────────────────────
+    if (storeId === 'lulu') {
+      const records = json.resultsList?.records || json.records || json.products || [];
+      if (Array.isArray(records) && records.length) {
+        return records.slice(0, 10).map(r => {
+          const attrs = r.attributes || r;
+          const name  = (attrs['product.displayName'] || attrs['product.name'] || attrs.name || [''])[0];
+          const price = parseArabicPrice(
+            (attrs['sku.activePrice'] || attrs['product.salePrice'] || attrs['product.listPrice'] || [0])[0]
+          );
+          const img   = (attrs['product.primaryImageAltText'] || attrs['product.primaryThumbImageURL'] || [''])[0];
+          const url   = (attrs['product.route'] || [''])[0];
+          return { name, price, image: img, url: url ? `https://www.luluhypermarket.com${url}` : '' };
+        }).filter(p => p.name && p.price > 0);
+      }
+      // Fallback for other LuLu API shapes
+      const altProds = json.products || json.data || [];
+      if (Array.isArray(altProds) && altProds.length) {
+        return altProds.slice(0, 10).map(p => ({
+          name:  p.name || p.title || '',
+          price: parseArabicPrice(p.price?.amount ?? p.price?.sale ?? p.price ?? 0),
+          image: p.image || p.thumbnail || '',
+          url:   p.url || '',
+        })).filter(p => p.name && p.price > 0);
+      }
+    }
+
+    // ── Othaim / BinDawood (Shopify suggest.json) ────────────
+    if (storeId === 'othaim' || storeId === 'bindawood') {
+      const host = storeId === 'othaim' ? 'https://www.othaim.com.sa' : 'https://www.bindawood.com';
+      const products = json.resources?.results?.products || json.products || [];
+      if (Array.isArray(products) && products.length) {
+        return products.slice(0, 10).map(p => ({
+          name:  p.title || p.name || '',
+          price: parseArabicPrice(p.price),
+          image: p.image || p.featured_image || '',
+          url:   p.url ? `${host}${p.url}` : '',
         })).filter(p => p.name && p.price > 0);
       }
     }
@@ -1029,6 +1081,9 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
+    // Noon internal catalog-search API (no auth, public endpoint)
+    apiUrl: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&locale=en-SA&limit=20`,
+    apiHeaders: { 'Accept': 'application/json', 'x-country-code': 'SAU', 'x-platform': 'web' },
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa, [class*="product"]',
   },
@@ -1050,6 +1105,9 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
+    // Salla platform REST API — standard endpoint for all Salla stores
+    apiUrl: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&include[]=price&per_page=20`,
+    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
     waitFor: 'salla-product-card, .salla-product-card, .product-card, [class*="product"]',
   },
@@ -1059,6 +1117,9 @@ const STORES = [
     ar:   'دانوب',
     emoji: '🔵',
     color: '#1d3557',
+    // Shopify suggest.json — works from any IP without auth if Danube is on Shopify
+    apiUrl: q => `https://www.danube.com.sa/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
+    apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.danube.com.sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .product, [class*="product"], .item',
   },
@@ -1068,6 +1129,9 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
+    // LuLu Oracle Commerce Cloud search API
+    apiUrl: q => `https://www.luluhypermarket.com/ccstoreui/v1/search?Nrpp=20&Ntt=${encodeURIComponent(q)}&lang=en&country=SA`,
+    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item, .product-card, li.product, [class*="product"]',
   },
@@ -1089,6 +1153,9 @@ const STORES = [
     ar:   'العثيم',
     emoji: '🟡',
     color: '#f4a261',
+    // Try Shopify suggest.json — Othaim website may be on Shopify
+    apiUrl: q => `https://www.othaim.com.sa/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
+    apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.othaim.com.sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .product-item, .product, [class*="product"]',
   },
@@ -1098,6 +1165,9 @@ const STORES = [
     ar:   'بن داود',
     emoji: '🟠',
     color: '#e76f51',
+    // Shopify suggest.json — BinDawood app is on Shopify
+    apiUrl: q => `https://www.bindawood.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
+    apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.bindawood.com/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .product-item, [class*="product"]',
   },
