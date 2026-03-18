@@ -1536,13 +1536,17 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     // In demo mode, try direct-API stores first (work globally without proxy)
     const apiStores    = STORES.filter(s => s.apiUrl || s.apiUrls?.length);
     const nonApiStores = STORES.filter(s => !s.apiUrl && !s.apiUrls?.length);
+    let realCount = 0;
 
     // Run direct-API stores in parallel
     const apiResults = await Promise.all(apiStores.map(async store => {
       const r = await scrapeStore(store, query);
-      const products = r.products.length > 0 ? r.products : getDemoProducts(query, store.id);
+      const isReal = r.products.length > 0;
+      if (isReal) realCount++;
+      const products = isReal ? r.products : getDemoProducts(query, store.id);
       const storeData = { id: store.id, name: store.name, ar: store.ar,
-                          emoji: store.emoji, color: store.color, products, error: r.error };
+                          emoji: store.emoji, color: store.color, products,
+                          isReal, error: r.error };
       write('store', storeData);
       return storeData;
     }));
@@ -1554,11 +1558,15 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
       const storeData = {
         id: store.id, name: store.name, ar: store.ar,
         emoji: store.emoji, color: store.color,
-        products: getDemoProducts(query, store.id), error: null,
+        products: getDemoProducts(query, store.id), isReal: false, error: null,
       };
       write('store', storeData);
       allResults.push(storeData);
     }
+
+    // Set partial mode if some stores returned real prices
+    if (realCount > 0 && realCount < STORES.length) usedDemoFallback = 'partial';
+    else if (realCount === STORES.length) usedDemoFallback = false; // all real, clear demo
   } else {
     const results = await Promise.all(STORES.map(store =>
       scrapeStore(store, query).then(sr => {
@@ -1594,7 +1602,16 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
     }
   }
 
-  const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
+  // Compute final demo flag:
+  // - 'partial' if some stores have real prices, some have demo
+  // - true if all stores are demo data
+  // - undefined if all stores have real prices
+  let demoFlag;
+  if (usedDemoFallback === 'partial') demoFlag = 'partial';
+  else if (usedDemoFallback) demoFlag = true;
+  else if (DEMO_MODE) demoFlag = true;
+  else demoFlag = undefined;
+  const finalData = { query, timestamp: new Date().toISOString(), demo: demoFlag, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults, query);
   write('done', finalData);
