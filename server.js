@@ -1039,21 +1039,52 @@ function extractFromApiJson(json, storeId) {
     }
 
     // ── Generic: walk JSON tree for product arrays ───────────
+    const NAME_KEYS  = ['name','title','display_name','displayName','product_name','productName',
+                        'item_name','itemName','description','label','ar_name','en_name'];
+    const PRICE_KEYS = ['price','sale_price','selling_price','special_price','offer_price',
+                        'unit_price','unitPrice','retail_price','amount','regular_price',
+                        'list_price','priceValue','final_price','sellingPrice'];
+    function pickName(p) {
+      for (const k of NAME_KEYS) {
+        const v = p[k];
+        if (typeof v === 'string' && v.trim()) return v.trim();
+        if (v && typeof v === 'object') {
+          const s = v.en || v.ar || v.value || v.text || '';
+          if (s) return s;
+        }
+      }
+      return '';
+    }
+    function pickPrice(p) {
+      for (const k of PRICE_KEYS) {
+        const v = p[k];
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') { const n = parseArabicPrice(v); if (n > 0) return n; }
+        if (typeof v === 'object') {
+          const inner = v.amount ?? v.value ?? v.sale ?? v.regular ?? v.selling ?? v.price ?? null;
+          if (inner !== null) { const n = parseArabicPrice(inner); if (n > 0) return n; }
+        }
+      }
+      return 0;
+    }
     const candidates = [];
     function walkJson(node, depth = 0) {
-      if (depth > 5 || candidates.length >= 10) return;
+      if (depth > 6 || candidates.length >= 10) return;
       if (Array.isArray(node) && node.length >= 1) {
         const first = node[0];
         if (first && typeof first === 'object') {
-          const hasName  = 'name' in first || 'title' in first;
-          const hasPrice = 'price' in first || 'sale_price' in first || 'amount' in first;
+          const hasName  = NAME_KEYS.some(k => k in first);
+          const hasPrice = PRICE_KEYS.some(k => k in first);
           if (hasName && hasPrice) {
             node.slice(0, 10).forEach(p => {
-              const name  = p.name || p.title || '';
-              const price = parseArabicPrice(
-                p.sale_price ?? p.price?.amount ?? p.price?.value ?? p.price ?? 0
-              );
-              if (name && price > 0) candidates.push({ name, price, image: p.image || '', url: p.url || '' });
+              const name  = pickName(p);
+              const price = pickPrice(p);
+              if (name && price > 0) candidates.push({
+                name, price,
+                image: p.image || p.thumbnail || p.img || p.photo || p.picture || '',
+                url:   p.url   || p.link    || p.href || p.slug   || '',
+              });
             });
             return;
           }
@@ -1258,13 +1289,16 @@ async function scrapeStore(store, query) {
     // If XHR already gave us products, skip DOM wait
     if (capturedApiProducts.length < 2) {
       try {
-        await page.waitForSelector(store.waitFor, { timeout: 6000 });
+        await page.waitForSelector(store.waitFor, { timeout: 8000 });
       } catch (_) {}
       // Scroll to trigger lazy-loaded product grids
       await page.evaluate(() => {
         window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'instant' });
       }).catch(() => {});
-      await page.waitForTimeout(1500);
+      // Small pause for lazy-load XHR triggered by scroll
+      await page.waitForTimeout(2000);
+      // Second networkidle check in case scroll triggered more XHR
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     }
 
     // Prefer XHR-captured data; fall back to DOM extraction
