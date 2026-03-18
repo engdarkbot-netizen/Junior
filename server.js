@@ -642,6 +642,26 @@ async function fetchJsonApi(url, extraHeaders = {}) {
   }
 }
 
+/* ─── Browser concurrency limiter ─────────────────────────────── */
+// Running 8 browser pages simultaneously can exhaust Railway container RAM.
+// Cap at 4 concurrent pages — API stores don't count against this limit.
+const MAX_BROWSER_PAGES = 4;
+let activeBrowserPages  = 0;
+const browserPageQueue  = [];
+
+function acquireBrowserSlot() {
+  if (activeBrowserPages < MAX_BROWSER_PAGES) {
+    activeBrowserPages++;
+    return Promise.resolve();
+  }
+  return new Promise(resolve => browserPageQueue.push(resolve));
+}
+
+function releaseBrowserSlot() {
+  const next = browserPageQueue.shift();
+  if (next) { next(); } else { activeBrowserPages--; }
+}
+
 /* ─── Browser pool ─────────────────────────────────────────────── */
 let browserInstance = null;
 
@@ -932,10 +952,9 @@ function extractFromApiJson(json, storeId) {
                     || json.items || [];
       if (products.length) return products.slice(0, 10).map(p => ({
         name:  p.title || p.name || '',
-        // Shopify: price is in cents as string e.g. "895" = 8.95
-        price: parseArabicPrice(p.price) > 100
-               ? parseArabicPrice(p.price) / 100
-               : parseArabicPrice(p.price),
+        // suggest.json returns price as display string in SAR (e.g. "8.95")
+        // The main product API returns cents — suggest.json does NOT
+        price: parseArabicPrice(p.price),
         image: p.image || p.featured_image || '',
         url:   p.url ? `https://www.tamimimarkets.com${p.url}` : '',
       })).filter(p => p.name && p.price > 0);
@@ -1111,6 +1130,8 @@ async function scrapeStore(store, query) {
   let page = null;
   const capturedApiProducts = [];
 
+  await acquireBrowserSlot(); // throttle concurrent pages to avoid OOM
+
   try {
     const browser = await getBrowser();
     page = await newPage(browser);
@@ -1176,6 +1197,7 @@ async function scrapeStore(store, query) {
       browserInstance = null;
     }
   } finally {
+    releaseBrowserSlot();
     if (page) {
       await page.context().close().catch(() => {});
     }
