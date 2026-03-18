@@ -2425,10 +2425,12 @@ function renderResults(data, ms) {
     // Price rows (sorted cheapest first)
     const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
     const isFullDemo = data.demo === true;
-    const qualityBadge = isFullDemo
-      ? `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable">~est</span>`
-      : `<span class="data-quality-badge live" title="Live price from store">live</span>`;
     const priceRows = rowsSorted.map((sp, i) => {
+      // Per-store quality badge: check isReal when in partial mode
+      const isLive = !isFullDemo && (data.demo !== 'partial' || sp.store.isReal !== false);
+      const qualityBadge = isLive
+        ? `<span class="data-quality-badge live" title="Live price from store">live</span>`
+        : `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable">~est</span>`;
       const isBest  = sp.product.price === minPrice;
       const barPct  = 100 - ((sp.product.price - minPrice) / pRange) * 80;
       return `
