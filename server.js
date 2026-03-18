@@ -1569,7 +1569,50 @@ app.get('/api/self-test', async (req, res) => {
   const query = (req.query.q || 'حليب المراعي').trim();
   const started = Date.now();
 
-  // Run all stores in parallel with a 25s cap per store to avoid hanging
+  // Helper: fetch with explicit timeout/error distinction
+  async function testFetch(url, headers, directOk) {
+    const t0 = Date.now();
+    try {
+      const json = await fetchJsonApi(url, headers, directOk);
+      const ms = Date.now() - t0;
+      if (json === null) {
+        // Could be non-2xx, JSON parse fail, or timeout — distinguish by ms
+        return { status: ms >= 19800 ? 'timeout' : 'null_response', ms };
+      }
+      return { status: 'ok', json, ms };
+    } catch (e) {
+      return { status: 'error', error: e.message.split('\n')[0], ms: Date.now() - t0 };
+    }
+  }
+
+  // Test proxy connectivity first (5s timeout)
+  let proxyStatus = null;
+  if (PROXY_URL) {
+    const proxyHost = PROXY_URL.replace(/\/\/[^@]*@/, '//***@').replace(/:\d+$/, ':***');
+    try {
+      const ctx = await getApiCtx(true);
+      const t0 = Date.now();
+      const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+      const json = resp.ok() ? await resp.json().catch(() => null) : null;
+      proxyStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
+    } catch (e) {
+      proxyStatus = { ok: false, error: e.message.split('\n')[0], host: proxyHost };
+    }
+  }
+
+  // Test direct (no-proxy) connectivity
+  let directStatus = null;
+  try {
+    const ctx = await getApiCtx(false);
+    const t0 = Date.now();
+    const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+    const json = resp.ok() ? await resp.json().catch(() => null) : null;
+    directStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
+  } catch (e) {
+    directStatus = { ok: false, error: e.message.split('\n')[0] };
+  }
+
+  // Run all stores in parallel
   const storeResults = await Promise.all(STORES.map(async store => {
     const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
     const epResults = [];
@@ -1579,16 +1622,13 @@ app.get('/api/self-test', async (req, res) => {
       const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
       const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
       const url = urlFn(query);
-      const t0 = Date.now();
-      try {
-        const json = await fetchJsonApi(url, headers, store.directOk || false);
-        const products = json ? extractFromApiJson(json, store.id) : [];
-        epResults.push({ url: url.split('?')[0], status: json ? 'ok' : 'null_response', products: products.length, ms: Date.now() - t0,
-                         sample: products[0] ? { name: products[0].name, price: products[0].price } : null });
-        if (products.length > 0 && gotProducts.length === 0) gotProducts = products.slice(0, 3);
-      } catch (e) {
-        epResults.push({ url: url.split('?')[0], status: 'error', error: e.message, ms: Date.now() - t0 });
-      }
+      const result = await testFetch(url, headers, store.directOk || false);
+      const products = result.json ? extractFromApiJson(result.json, store.id) : [];
+      epResults.push({ url: url.split('?')[0], status: result.status,
+                       ...(result.error ? { error: result.error } : {}),
+                       products: products.length, ms: result.ms,
+                       sample: products[0] ? { name: products[0].name, price: products[0].price } : null });
+      if (products.length > 0 && gotProducts.length === 0) gotProducts = products.slice(0, 3);
     }
 
     return { store: store.id, name: store.name, directOk: store.directOk || false,
@@ -1599,7 +1639,9 @@ app.get('/api/self-test', async (req, res) => {
   res.json({
     query,
     demo: DEMO_MODE,
-    proxy: PROXY_URL ? 'configured' : 'none (direct APIs only)',
+    proxyConfigured: !!PROXY_URL,
+    proxyStatus,
+    directStatus,
     totalMs: Date.now() - started,
     stores: storeResults,
     summary: storeResults.map(s => `${s.store}: ${s.totalFound} products`).join(' | '),
