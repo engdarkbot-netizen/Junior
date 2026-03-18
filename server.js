@@ -1564,6 +1564,48 @@ app.get('/api/debug-search', async (req, res) => {
   });
 });
 
+/* ─── GET /api/self-test — tests all direct APIs from this server ─ */
+app.get('/api/self-test', async (req, res) => {
+  const query = (req.query.q || 'حليب المراعي').trim();
+  const started = Date.now();
+  const storeResults = [];
+
+  for (const store of STORES) {
+    const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
+    const epResults = [];
+    let gotProducts = [];
+
+    for (const ep of endpoints) {
+      const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
+      const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
+      const url = urlFn(query);
+      const t0 = Date.now();
+      try {
+        const json = await fetchJsonApi(url, headers, store.directOk || false);
+        const products = json ? extractFromApiJson(json, store.id) : [];
+        epResults.push({ url: url.split('?')[0], status: json ? 'ok' : 'null_response', products: products.length, ms: Date.now() - t0,
+                         sample: products[0] ? { name: products[0].name, price: products[0].price } : null });
+        if (products.length > 0 && gotProducts.length === 0) gotProducts = products.slice(0, 3);
+      } catch (e) {
+        epResults.push({ url: url.split('?')[0], status: 'error', error: e.message, ms: Date.now() - t0 });
+      }
+    }
+
+    storeResults.push({ store: store.id, name: store.name, directOk: store.directOk || false,
+                        endpoints: epResults, totalFound: gotProducts.length,
+                        sample: gotProducts.slice(0, 2) });
+  }
+
+  res.json({
+    query,
+    demo: DEMO_MODE,
+    proxy: PROXY_URL ? 'configured' : 'none (direct APIs only)',
+    totalMs: Date.now() - started,
+    stores: storeResults,
+    summary: storeResults.map(s => `${s.store}: ${s.totalFound} products`).join(' | '),
+  });
+});
+
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
 app.get('/api/search', rateLimit, async (req, res) => {
   const query = (req.query.q || '').trim();
