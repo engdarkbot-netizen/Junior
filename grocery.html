@@ -86,6 +86,15 @@ html { scroll-behavior: smooth; }
   --fast: 0.15s;
   --med:  0.25s;
   --slow: 0.4s;
+  /* Aliases for legacy token names used in components */
+  --green:       #00b14f;
+  --green-mid:   #00c957;
+  --green-light: #e6f9ee;
+  --green-pale:  #f0fdf4;
+  --text-muted:  #6b7280;
+  --text-faint:  #9ca3af;
+  --surface-alt: #f9fafb;
+  --gold-pale:   #fef9ec;
 }
 
 [data-theme="dark"] {
@@ -106,6 +115,13 @@ html { scroll-behavior: smooth; }
   --shadow:    0 4px 6px rgba(0,0,0,.5);
   --shadow-md: 0 8px 16px rgba(0,0,0,.6);
   --shadow-lg: 0 16px 32px rgba(0,0,0,.7);
+  /* Aliases — dark overrides */
+  --green-light: rgba(0,177,79,.12);
+  --green-pale:  rgba(0,177,79,.08);
+  --text-muted:  #768390;
+  --text-faint:  #545d68;
+  --surface-alt: #1c2128;
+  --gold-pale:   rgba(245,158,11,.12);
 }
 
 /* old tokens removed — new tokens above */
