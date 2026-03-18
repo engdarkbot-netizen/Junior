@@ -1081,9 +1081,13 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
-    // Noon internal catalog-search API (no auth, public endpoint)
-    apiUrl: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&locale=en-SA&limit=20`,
-    apiHeaders: { 'Accept': 'application/json', 'x-country-code': 'SAU', 'x-platform': 'web' },
+    // Multiple Noon API patterns — try each until one returns products
+    apiUrls: [
+      { url: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&locale=en-SA&limit=20`,
+        headers: { 'Accept': 'application/json', 'x-country-code': 'SAU', 'x-platform': 'web' } },
+      { url: q => `https://api.noon.com/catalog-search-service/v1/search?catalog=SA&lang=en&q=${encodeURIComponent(q)}&category=grocery&limit=20`,
+        headers: { 'Accept': 'application/json', 'x-country-code': 'SAU' } },
+    ],
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa, [class*="product"]',
   },
@@ -1105,9 +1109,13 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
-    // Salla platform REST API — standard endpoint for all Salla stores
-    apiUrl: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&include[]=price&per_page=20`,
-    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    // Salla platform REST API — try both common Salla endpoint patterns
+    apiUrls: [
+      { url: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&include[]=price&page_size=20`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+      { url: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&per_page=20`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+    ],
     url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
     waitFor: 'salla-product-card, .salla-product-card, .product-card, [class*="product"]',
   },
@@ -1129,9 +1137,13 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
-    // LuLu Oracle Commerce Cloud search API
-    apiUrl: q => `https://www.luluhypermarket.com/ccstoreui/v1/search?Nrpp=20&Ntt=${encodeURIComponent(q)}&lang=en&country=SA`,
-    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    // LuLu — try Oracle Commerce Cloud and Magento-style endpoints
+    apiUrls: [
+      { url: q => `https://www.luluhypermarket.com/ccstoreui/v1/search?Nrpp=20&Ntt=${encodeURIComponent(q)}&lang=en&country=SA`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+      { url: q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}&ajax=1`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+    ],
     url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item, .product-card, li.product, [class*="product"]',
   },
@@ -1179,9 +1191,13 @@ async function scrapeStore(store, query) {
                    products: [], error: null };
 
   // ── Tier 1: lightweight direct JSON API (no browser overhead) ──
-  if (store.apiUrl) {
+  // Supports single apiUrl or apiUrls array (tries each in order)
+  const apiEndpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
+  for (const ep of apiEndpoints) {
+    const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
+    const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
     try {
-      const json = await fetchJsonApi(store.apiUrl(query), store.apiHeaders || {});
+      const json = await fetchJsonApi(urlFn(query), headers);
       if (json) {
         const products = extractFromApiJson(json, store.id);
         if (products.length > 0) {
@@ -1189,7 +1205,7 @@ async function scrapeStore(store, query) {
           console.log(`[${store.id}] "${query}" → ${result.products.length} products (direct-API)`);
           return result;
         }
-        console.log(`[${store.id}] direct-API returned 0 products, falling back to browser`);
+        console.log(`[${store.id}] direct-API returned 0 products, trying next endpoint or browser`);
       }
     } catch (err) {
       console.log(`[${store.id}] direct-API error: ${err.message.split('\n')[0]}`);
@@ -1283,7 +1299,7 @@ async function runScrape(query) {
   // stores (Tamimi Shopify, Carrefour OCC) — these work from any IP globally
   // without a proxy. If they return products, mix real + demo for the rest.
   if (DEMO_MODE) {
-    const apiOnlyStores = STORES.filter(s => s.apiUrl);
+    const apiOnlyStores = STORES.filter(s => s.apiUrl || s.apiUrls?.length);
     if (apiOnlyStores.length > 0) {
       const apiResults = await Promise.all(apiOnlyStores.map(s => scrapeStore(s, query)));
       const apiCount = apiResults.reduce((n, r) => n + r.products.length, 0);
@@ -1484,8 +1500,8 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
 
   if (DEMO_MODE) {
     // In demo mode, try direct-API stores first (work globally without proxy)
-    const apiStores    = STORES.filter(s => s.apiUrl);
-    const nonApiStores = STORES.filter(s => !s.apiUrl);
+    const apiStores    = STORES.filter(s => s.apiUrl || s.apiUrls?.length);
+    const nonApiStores = STORES.filter(s => !s.apiUrl && !s.apiUrls?.length);
 
     // Run direct-API stores in parallel
     const apiResults = await Promise.all(apiStores.map(async store => {
