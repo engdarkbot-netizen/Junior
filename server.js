@@ -17,7 +17,7 @@ const cors         = require('cors');
 const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
-const { chromium } = require('playwright');
+const { chromium, request: playwrightRequest } = require('playwright');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
 const MAX_QUERY_LEN = 200;
@@ -599,6 +599,49 @@ async function runDemoScrape(query) {
   };
 }
 
+/* ─── Playwright API request context (lightweight proxy-aware HTTP) */
+let _apiCtx = null;
+
+async function getApiCtx() {
+  if (_apiCtx) return _apiCtx;
+  const opts = {
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+               '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    extraHTTPHeaders: {
+      'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Accept':          'application/json, text/plain, */*',
+    },
+    ignoreHTTPSErrors: true,
+  };
+  if (PROXY_URL) {
+    opts.proxy = {
+      server:   PROXY_URL,
+      username: PROXY_USER || undefined,
+      password: PROXY_PASS || undefined,
+    };
+  }
+  _apiCtx = await playwrightRequest.newContext(opts);
+  return _apiCtx;
+}
+
+async function fetchJsonApi(url, extraHeaders = {}) {
+  try {
+    const ctx = await getApiCtx();
+    const resp = await ctx.get(url, {
+      headers: extraHeaders,
+      timeout: 20000,
+    });
+    if (!resp.ok()) {
+      console.log(`[api] ${resp.status()} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+      return null;
+    }
+    return await resp.json().catch(() => null);
+  } catch (err) {
+    console.log(`[api] fetch failed: ${err.message.split('\n')[0]}`);
+    return null;
+  }
+}
+
 /* ─── Browser pool ─────────────────────────────────────────────── */
 let browserInstance = null;
 
@@ -853,25 +896,27 @@ function extractFromApiJson(json, storeId) {
   try {
     // ── Noon ──────────────────────────────────────────────────
     if (storeId === 'noon') {
-      const hits = json.hits || json.data?.hits || json.results?.hits || [];
+      // Direct API response: { hits: [...] } or nested
+      const hits = json.hits || json.data?.hits || json.results?.hits
+                || json.searchResult?.hits || [];
       if (hits.length) return hits.slice(0, 10).map(h => ({
-        name:  h.name  || h.title || '',
-        price: parseArabicPrice(h.sale_price ?? h.price ?? 0),
+        name:  h.name || h.title || h.display_name || '',
+        price: parseArabicPrice(h.sale_price ?? h.price?.sale_price ?? h.price ?? 0),
         image: h.image_keys?.[0]
           ? `https://f.nooncdn.com/p/${h.image_keys[0]}t.jpg`
-          : (h.image || ''),
-        url: h.url ? `https://www.noon.com${h.url}` : '',
+          : (h.image || h.thumbnail || ''),
+        url: h.url ? `https://www.noon.com${h.url}` : (h.sku ? `https://www.noon.com/saudi-en/${h.sku}/` : ''),
       })).filter(p => p.name && p.price > 0);
     }
 
-    // ── Carrefour (SAP Spartacus OCC) ────────────────────────
+    // ── Carrefour (SAP Hybris OCC v2) ────────────────────────
     if (storeId === 'carrefour') {
       const products = json.products || json.data?.products || [];
       if (products.length) return products.slice(0, 10).map(p => ({
         name:  p.name || '',
         price: parseArabicPrice(p.price?.value ?? p.price ?? 0),
         image: p.images?.[0]?.url || p.image?.url || '',
-        url:   p.url ? `https://www.carrefourksa.com${p.url}` : '',
+        url:   p.url ? `https://www.carrefourksa.com${p.url}` : (p.code ? `https://www.carrefourksa.com/mafsau/en/p/${p.code}` : ''),
       })).filter(p => p.name && p.price > 0);
     }
 
@@ -960,8 +1005,11 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
+    // Noon search API — JSON endpoint that powers their search page
+    apiUrl: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&limit=20`,
+    apiHeaders: { 'Accept': 'application/json', 'X-Platform': 'WEB', 'X-Locale': 'en-sa' },
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
-    waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa',
+    waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa, [class*="product"]',
   },
   {
     id:   'carrefour',
@@ -969,6 +1017,9 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
+    // SAP Hybris OCC v2 search API
+    apiUrl: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
+    apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
     waitFor: 'cx-product-grid-item, cx-product-card, .product-card, [class*="product"]',
   },
@@ -978,8 +1029,11 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
+    // Salla platform JSON API
+    apiUrl: q => `https://www.panda.com.sa/api/products?keyword=${encodeURIComponent(q)}&limit=20`,
+    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
-    waitFor: 'salla-product-card, .salla-product-card, .product-card',
+    waitFor: 'salla-product-card, .salla-product-card, .product-card, [class*="product"]',
   },
   {
     id:   'danube',
@@ -988,7 +1042,7 @@ const STORES = [
     emoji: '🔵',
     color: '#1d3557',
     url:  q => `https://www.danube.com.sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .product, [class*="product"]',
+    waitFor: '.product-card, .product, [class*="product"], .item',
   },
   {
     id:   'lulu',
@@ -997,7 +1051,7 @@ const STORES = [
     emoji: '🟢',
     color: '#2a9d8f',
     url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-item, .product-card, li.product',
+    waitFor: '.product-item, .product-card, li.product, [class*="product"]',
   },
   {
     id:   'tamimi',
@@ -1005,8 +1059,10 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
+    // Shopify Storefront API — no auth required, proxy-friendly
+    apiUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
+    apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
-    lightUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
     waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
   },
   {
@@ -1016,7 +1072,7 @@ const STORES = [
     emoji: '🟡',
     color: '#f4a261',
     url:  q => `https://www.othaim.com.sa/search?q=${encodeURIComponent(q)}`,
-    waitFor: '.product-card, .product-item, .product',
+    waitFor: '.product-card, .product-item, .product, [class*="product"]',
   },
   {
     id:   'bindawood',
@@ -1033,6 +1089,26 @@ async function scrapeStore(store, query) {
   const result = { storeId: store.id, storeName: store.name, storeAr: store.ar,
                    storeEmoji: store.emoji, storeColor: store.color,
                    products: [], error: null };
+
+  // ── Tier 1: lightweight direct JSON API (no browser overhead) ──
+  if (store.apiUrl) {
+    try {
+      const json = await fetchJsonApi(store.apiUrl(query), store.apiHeaders || {});
+      if (json) {
+        const products = extractFromApiJson(json, store.id);
+        if (products.length > 0) {
+          result.products = products.slice(0, 8);
+          console.log(`[${store.id}] "${query}" → ${result.products.length} products (direct-API)`);
+          return result;
+        }
+        console.log(`[${store.id}] direct-API returned 0 products, falling back to browser`);
+      }
+    } catch (err) {
+      console.log(`[${store.id}] direct-API error: ${err.message.split('\n')[0]}`);
+    }
+  }
+
+  // ── Tier 2: full browser scrape ───────────────────────────────
   let page = null;
   const capturedApiProducts = [];
 
@@ -1040,27 +1116,7 @@ async function scrapeStore(store, query) {
     const browser = await getBrowser();
     page = await newPage(browser);
 
-    // ── Fast path: direct JSON API for stores that expose one ─
-    if (store.lightUrl) {
-      try {
-        const resp = await page.goto(store.lightUrl(query), { timeout: 15000, waitUntil: 'domcontentloaded' });
-        if (resp && resp.ok()) {
-          const json = await resp.json().catch(() => null);
-          if (json) {
-            const products = extractFromApiJson(json, store.id);
-            if (products.length > 0) {
-              result.products = products.slice(0, 8);
-              console.log(`[${store.id}] "${query}" → ${result.products.length} products (direct API)`);
-              return result;
-            }
-          }
-        }
-      } catch (_) {
-        console.log(`[${store.id}] lightUrl failed, falling through to browser scrape`);
-      }
-    }
-
-    // ── Intercept JSON API responses before DOM scraping ──────
+    // Intercept JSON API responses fired by the SPA JS
     const SKIP_API = /\.(css|js|woff|png|jpg|svg|ico|gif|mp4)(\?|$)/i;
     const SKIP_HOST = /analytics|tracking|gtm\.js|clarity|hotjar|facebook|google-analytics/i;
 
@@ -1074,45 +1130,49 @@ async function scrapeStore(store, query) {
         const products = extractFromApiJson(json, store.id);
         if (products.length > 0) {
           capturedApiProducts.push(...products);
-          console.log(`[${store.id}] API captured ${products.length} products from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+          console.log(`[${store.id}] XHR captured ${products.length} products from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
         }
       } catch (_) {}
     });
 
-    // Use domcontentloaded (not 'load') — avoids waiting 28s for images/fonts
-    // through the proxy before we can check for products
+    // domcontentloaded is faster than 'load' — avoids waiting for every
+    // image/font through the proxy before we can check for products
     await page.goto(store.url(query), {
-      timeout: 35000,
+      timeout: 40000,
       waitUntil: 'domcontentloaded',
-    }).catch(() => {}); // page timeout is non-fatal — we may have API data
+    }).catch(e => {
+      console.log(`[${store.id}] goto timed out / failed: ${e.message.split('\n')[0]}`);
+    });
 
-    // Give JS time to initialize and fire search API calls
-    await page.waitForTimeout(2500);
+    // Wait for SPA JS to initialize and fire search API calls
+    await page.waitForTimeout(3000);
 
-    // If API already gave us enough, skip DOM wait
+    // If XHR already gave us products, skip DOM wait
     if (capturedApiProducts.length < 2) {
       try {
-        await page.waitForSelector(store.waitFor, { timeout: 7000 });
+        await page.waitForSelector(store.waitFor, { timeout: 8000 });
       } catch (_) {}
-      // Scroll mid-page to trigger lazy-loaded product grids
+      // Scroll to trigger lazy-loaded product grids
       await page.evaluate(() => {
         window.scrollTo({ top: document.body.scrollHeight / 2, behavior: 'instant' });
       }).catch(() => {});
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(2000);
     }
 
-    // Prefer API-captured data; fall back to DOM extraction
+    // Prefer XHR-captured data; fall back to DOM extraction
     if (capturedApiProducts.length >= 1) {
       result.products = capturedApiProducts
-        .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i) // dedup
+        .filter((p, i, a) => a.findIndex(x => x.name === p.name) === i)
         .slice(0, 8);
     } else {
       result.products = await extractProducts(page, store.name);
     }
-    console.log(`[${store.id}] "${query}" → ${result.products.length} products${capturedApiProducts.length ? ' (API)' : ' (DOM)'}`);
+    const method = capturedApiProducts.length ? 'XHR' : 'DOM';
+    console.log(`[${store.id}] "${query}" → ${result.products.length} products (browser-${method})`);
 
   } catch (err) {
     result.error = err.message.split('\n')[0];
+    console.log(`[${store.id}] browser error: ${result.error}`);
     if (browserInstance && !browserInstance.isConnected()) {
       browserInstance = null;
     }
@@ -1182,26 +1242,64 @@ app.get('/api/ping', (_req, res) => {
 
 /* ─── GET /api/test-proxy — verify proxy routing ───────────────── */
 app.get('/api/test-proxy', async (_req, res) => {
+  const safeProxy = PROXY_URL ? PROXY_URL.replace(/:[^:@]*@/, ':***@') : null;
   if (!PROXY_URL) {
     return res.json({ ok: false, error: 'No PROXY_URL configured', proxy: null });
   }
+  const results = {};
+
+  // Test 1: lightweight API context
+  try {
+    const json = await fetchJsonApi('https://api.ipify.org?format=json');
+    results.apiContext = json ? { ok: true, ip: json.ip } : { ok: false, error: 'empty response' };
+  } catch (err) {
+    results.apiContext = { ok: false, error: err.message.split('\n')[0] };
+  }
+
+  // Test 2: full browser context
   let page = null;
   try {
     const browser = await getBrowser();
     page = await newPage(browser);
     const resp = await page.goto('https://api.ipify.org?format=json', {
-      timeout: 20000,
-      waitUntil: 'domcontentloaded',
+      timeout: 20000, waitUntil: 'domcontentloaded',
     });
     const json = await resp.json();
-    const safePrxoy = PROXY_URL.replace(/:[^:@]*@/, ':***@');
-    res.json({ ok: true, ip: json.ip, proxy: safePrxoy });
+    results.browserContext = { ok: true, ip: json.ip };
   } catch (err) {
-    const safeProxy = PROXY_URL.replace(/:[^:@]*@/, ':***@');
-    res.json({ ok: false, error: err.message.split('\n')[0], proxy: safeProxy });
+    results.browserContext = { ok: false, error: err.message.split('\n')[0] };
   } finally {
     if (page) await page.context().close().catch(() => {});
   }
+
+  const ok = results.apiContext?.ok || results.browserContext?.ok;
+  res.json({ ok, proxy: safeProxy, results });
+});
+
+/* ─── GET /api/debug-search — per-store scrape diagnostic ──────── */
+app.get('/api/debug-search', async (req, res) => {
+  const query   = (req.query.q     || 'milk').trim();
+  const storeId = (req.query.store || '').trim();
+  const targets = storeId ? STORES.filter(s => s.id === storeId) : STORES;
+
+  if (!targets.length) {
+    return res.status(400).json({ error: `Unknown store: ${storeId}. Valid: ${STORES.map(s => s.id).join(', ')}` });
+  }
+
+  console.log(`[debug-search] query="${query}" stores=${targets.map(s => s.id)}`);
+  const results = await Promise.all(targets.map(async s => {
+    const t0 = Date.now();
+    const r  = await scrapeStore(s, query);
+    return {
+      store:   s.id,
+      count:   r.products.length,
+      sample:  r.products[0] || null,
+      error:   r.error,
+      ms:      Date.now() - t0,
+    };
+  }));
+
+  res.json({ query, demoMode: DEMO_MODE, proxy: PROXY_URL ? 'configured' : 'none', results });
 });
 
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
