@@ -1696,11 +1696,25 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   // - 'partial' if some stores have real prices, some have demo
   // - true if all stores are demo data
   // - undefined if all stores have real prices
+  // Determine final demo flag based on actual results:
+  // false/undefined = all real; 'partial' = some real some demo; true = all demo
   let demoFlag;
-  if (usedDemoFallback === 'partial') demoFlag = 'partial';
-  else if (usedDemoFallback) demoFlag = true;
-  else if (DEMO_MODE) demoFlag = true;
-  else demoFlag = undefined;
+  if (usedDemoFallback === false) {
+    demoFlag = undefined; // all real prices (overrides DEMO_MODE)
+  } else if (usedDemoFallback === 'partial') {
+    demoFlag = 'partial';
+  } else if (usedDemoFallback === true) {
+    demoFlag = true;
+  } else if (DEMO_MODE) {
+    // usedDemoFallback not set (non-demo path didn't run); DEMO_MODE was true
+    // but we ran scrapeStore for all stores anyway — determine from results
+    const realCount2 = allResults.filter(s => s.isReal || (s.products?.length > 0 && !s.products?.every(p => p._demo))).length;
+    if (realCount2 === 0) demoFlag = true;
+    else if (realCount2 < STORES.length) demoFlag = 'partial';
+    else demoFlag = undefined;
+  } else {
+    demoFlag = undefined;
+  }
   const finalData = { query, timestamp: new Date().toISOString(), demo: demoFlag, stores: allResults };
   cacheSet(key, finalData);
   trackSearch(key, 0, false, allResults, query);
