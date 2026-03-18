@@ -1207,21 +1207,39 @@ async function scrapeStore(store, query) {
 
 /* ─── Shared scrape runner (used by both endpoints) ────────────── */
 async function runScrape(query) {
-  if (DEMO_MODE) return runDemoScrape(query);
+  // In demo mode we normally return fake data. But first try the direct-API
+  // stores (Tamimi Shopify, Carrefour OCC) — these work from any IP globally
+  // without a proxy. If they return products, mix real + demo for the rest.
+  if (DEMO_MODE) {
+    const apiOnlyStores = STORES.filter(s => s.apiUrl);
+    if (apiOnlyStores.length > 0) {
+      const apiResults = await Promise.all(apiOnlyStores.map(s => scrapeStore(s, query)));
+      const apiCount = apiResults.reduce((n, r) => n + r.products.length, 0);
+      if (apiCount > 0) {
+        console.log(`[scrape] Demo mode but direct-API returned ${apiCount} real products`);
+        const demoData = runDemoScrape(query);
+        const apiMap = Object.fromEntries(apiResults.map(r => [r.storeId, r]));
+        return {
+          ...demoData,
+          demo: 'partial',
+          stores: demoData.stores.map(ds => {
+            const real = apiMap[ds.id];
+            return real && real.products.length > 0
+              ? { ...ds, products: real.products, error: null }
+              : ds;
+          }),
+        };
+      }
+    }
+    return runDemoScrape(query);
+  }
 
   const storeResults = await Promise.all(STORES.map(store => scrapeStore(store, query)));
 
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
-  // Only fall back to demo when no proxy is configured (datacenter IPs are always blocked).
-  // When a proxy IS set, return real (possibly empty) results — silent demo fallback hides
-  // proxy/scraping errors that need to be diagnosed.
-  if (totalProducts === 0 && !PROXY_URL) {
-    console.log(`[scrape] No products found for "${query}" — no proxy configured, using demo data`);
-    return runDemoScrape(query);
-  }
   if (totalProducts === 0) {
-    console.log(`[scrape] No products found for "${query}" — proxy configured but all stores returned 0. Check /api/test-proxy`);
+    console.log(`[scrape] "${query}" — all stores returned 0. proxy=${PROXY_URL ? 'set' : 'none'}. Check /api/test-proxy and /api/debug-search`);
   }
 
   return {
@@ -1393,8 +1411,23 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   const allResults = [];
 
   if (DEMO_MODE) {
-    // Stream demo results store-by-store with realistic delays
-    for (const store of STORES) {
+    // In demo mode, try direct-API stores first (work globally without proxy)
+    const apiStores    = STORES.filter(s => s.apiUrl);
+    const nonApiStores = STORES.filter(s => !s.apiUrl);
+
+    // Run direct-API stores in parallel
+    const apiResults = await Promise.all(apiStores.map(async store => {
+      const r = await scrapeStore(store, query);
+      const products = r.products.length > 0 ? r.products : getDemoProducts(query, store.id);
+      const storeData = { id: store.id, name: store.name, ar: store.ar,
+                          emoji: store.emoji, color: store.color, products, error: r.error };
+      write('store', storeData);
+      return storeData;
+    }));
+    allResults.push(...apiResults);
+
+    // Stream demo results for non-API stores with realistic delays
+    for (const store of nonApiStores) {
       await new Promise(r => setTimeout(r, 80 + Math.random() * 120));
       const storeData = {
         id: store.id, name: store.name, ar: store.ar,
