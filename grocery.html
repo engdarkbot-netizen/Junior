@@ -913,22 +913,7 @@ footer {
   pointer-events: none;
 }
 
-/* ── Language Toggle ────────────────────────────────────────────── */
-.lang-btn {
-  height: 30px;
-  padding: 0 .65rem;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,.3);
-  background: rgba(255,255,255,.12);
-  color: #fff;
-  font-size: .78rem;
-  font-weight: 700;
-  cursor: pointer;
-  letter-spacing: .03em;
-  transition: background var(--fast);
-  flex-shrink: 0;
-}
-.lang-btn:hover { background: rgba(255,255,255,.25); }
+/* ── Language Toggle (hero variant — no longer used, removed duplicate) ─ */
 
 /* ── RTL overrides ──────────────────────────────────────────────── */
 html[dir="rtl"] body { font-family: 'Tajawal', system-ui, sans-serif; }
@@ -2626,7 +2611,7 @@ function renderResults(data, ms) {
       }
     }
     if (cheapestPrice != null) {
-      const waText = `🛒 أرخص سعر لـ ${cheapestProductName}: ${cheapestPrice.toFixed(2)} ريال في ${cheapestStore}\nقارن الأسعار: https://production-890c.up.railway.app`;
+      const waText = `🛒 أرخص سعر لـ ${cheapestProductName}: ${cheapestPrice.toFixed(2)} ريال في ${cheapestStore}\nقارن الأسعار: ${window.location.origin}`;
       waBtn.href = `https://wa.me/?text=${encodeURIComponent(waText)}`;
       waBtn.classList.add('visible');
     } else {
