@@ -1474,19 +1474,55 @@ app.get('/api/debug-search', async (req, res) => {
   }
 
   console.log(`[debug-search] query="${query}" stores=${targets.map(s => s.id)}`);
+
+  // First test each store's direct API endpoints individually
   const results = await Promise.all(targets.map(async s => {
+    const apiEndpoints = s.apiUrls || (s.apiUrl ? [{ url: s.apiUrl, headers: s.apiHeaders }] : []);
+    const apiTests = [];
+    let apiSuccess = false;
+
+    // Test each API endpoint
+    for (const ep of apiEndpoints) {
+      const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
+      const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (s.apiHeaders || {});
+      const apiUrl = urlFn(query);
+      const t1 = Date.now();
+      try {
+        const json = await fetchJsonApi(apiUrl, headers);
+        if (json) {
+          const products = extractFromApiJson(json, s.id);
+          apiTests.push({ url: apiUrl.split('?')[0], count: products.length, ms: Date.now()-t1, status: 'ok' });
+          if (products.length > 0) apiSuccess = true;
+        } else {
+          apiTests.push({ url: apiUrl.split('?')[0], count: 0, ms: Date.now()-t1, status: 'no-json' });
+        }
+      } catch (err) {
+        apiTests.push({ url: apiUrl.split('?')[0], count: 0, ms: Date.now()-t1, status: err.message.split('\n')[0] });
+      }
+    }
+
+    // Run full scrape (uses both tiers internally)
     const t0 = Date.now();
     const r  = await scrapeStore(s, query);
     return {
-      store:   s.id,
-      count:   r.products.length,
-      sample:  r.products[0] || null,
-      error:   r.error,
-      ms:      Date.now() - t0,
+      store:        s.id,
+      apiEndpoints: apiTests,
+      apiSuccess,
+      count:        r.products.length,
+      sample:       r.products[0] || null,
+      allProducts:  r.products,
+      error:        r.error,
+      ms:           Date.now() - t0,
     };
   }));
 
-  res.json({ query, demoMode: DEMO_MODE, proxy: PROXY_URL ? 'configured' : 'none', results });
+  res.json({
+    query,
+    demoMode: DEMO_MODE,
+    proxy: PROXY_URL ? 'configured' : 'none',
+    summary: results.map(r => `${r.store}: ${r.count} products (api:${r.apiSuccess})`).join(', '),
+    results,
+  });
 });
 
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
