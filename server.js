@@ -711,6 +711,9 @@ async function newPage(browser) {
     viewport: { width: 1280, height: 800 },
     locale: 'ar-SA',                     // appear as Saudi visitor
     timezoneId: 'Asia/Riyadh',
+    // Spoof browser geolocation to Riyadh — some stores check this
+    geolocation: { latitude: 24.6877, longitude: 46.7219, accuracy: 100 },
+    permissions: ['geolocation'],
     extraHTTPHeaders: {
       'Accept-Language': 'ar-SA,ar;q=0.9,en-US;q=0.8,en;q=0.7',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
