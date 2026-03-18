@@ -647,17 +647,21 @@ let browserInstance = null;
 
 async function getBrowser() {
   if (!browserInstance || !browserInstance.isConnected()) {
-    browserInstance = await chromium.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-zygote',
-      ],
-    });
+    const args = [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--disable-extensions',
+      '--disable-background-networking',
+    ];
+    // Pass proxy at browser level too (belt-and-suspenders)
+    if (PROXY_URL) {
+      args.push(`--proxy-server=${PROXY_URL}`);
+    }
+    browserInstance = await chromium.launch({ headless: true, args });
   }
   return browserInstance;
 }
@@ -687,8 +691,9 @@ async function newPage(browser) {
 
   const ctx = await browser.newContext(contextOptions);
 
-  // Block fonts, media — keep HTML/JS/XHR for SPA rendering
-  await ctx.route(/\.(woff2?|ttf|eot|otf|mp4|mp3|webm|gif)(\?.*)?$/, r => r.abort());
+  // Block images, fonts, media — only HTML/JS/XHR needed for scraping
+  // This speeds up page load significantly through the proxy
+  await ctx.route(/\.(woff2?|ttf|eot|otf|mp4|mp3|webm|gif|png|jpe?g|svg|ico|webp)(\?.*)?$/, r => r.abort());
 
   // Mask Playwright fingerprint
   await ctx.addInitScript(() => {
@@ -1005,9 +1010,6 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
-    // Noon search API — JSON endpoint that powers their search page
-    apiUrl: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&limit=20`,
-    apiHeaders: { 'Accept': 'application/json', 'X-Platform': 'WEB', 'X-Locale': 'en-sa' },
     url:  q => `https://www.noon.com/saudi-en/search/?q=${encodeURIComponent(q)}&cat=grocery`,
     waitFor: '[data-qa="product-name"], [class*="productContainer"], [class*="productCard"], .sc-bdVTJa, [class*="product"]',
   },
@@ -1017,7 +1019,7 @@ const STORES = [
     ar:   'كارفور',
     emoji: '🔴',
     color: '#003087',
-    // SAP Hybris OCC v2 search API
+    // SAP Hybris OCC v2 — standard endpoint, no auth needed for search
     apiUrl: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
     apiHeaders: { 'Accept': 'application/json' },
     url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
@@ -1029,9 +1031,6 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
-    // Salla platform JSON API
-    apiUrl: q => `https://www.panda.com.sa/api/products?keyword=${encodeURIComponent(q)}&limit=20`,
-    apiHeaders: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
     url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
     waitFor: 'salla-product-card, .salla-product-card, .product-card, [class*="product"]',
   },
