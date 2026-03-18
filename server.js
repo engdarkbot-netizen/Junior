@@ -1972,15 +1972,27 @@ app.post('/api/admin/reset-analytics', (req, res) => {
 
 /* ─── Health check ─────────────────────────────────────────────── */
 app.get('/api/health', (_, res) => res.json({
-  status: 'ok',
-  uptime: process.uptime(),
-  memory: process.memoryUsage(),
-  browser: DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
-  demo: DEMO_MODE,
+  status:     'ok',
+  uptime:     process.uptime(),
+  memory:     process.memoryUsage(),
+  browser:    DEMO_MODE ? 'unavailable (demo mode)' : (browserInstance ? (browserInstance.isConnected() ? 'connected' : 'disconnected') : 'none'),
+  demo:       DEMO_MODE,
   demoReason: DEMO_REASON,
-  stores: STORES.map(s => s.id),
-  proxy: PROXY_URL ? 'configured' : 'none',
-  timestamp: new Date().toISOString(),
+  proxy:      PROXY_URL ? 'configured' : 'none — set PROXY_URL env var for all stores',
+  stores:     STORES.map(s => ({
+    id:        s.id,
+    hasDirectApi: !!(s.apiUrl || s.apiUrls?.length),
+    directOk:  s.directOk || false,
+    note:      s.directOk ? 'globally accessible (no proxy needed)'
+               : (s.apiUrl || s.apiUrls?.length) ? 'direct API (may need proxy)'
+               : 'browser-only (requires proxy)',
+  })),
+  timestamp:  new Date().toISOString(),
+  diagnose:   {
+    tamimi:     'Shopify suggest.json — real prices guaranteed',
+    carrefour:  'OCC v2 API — real prices if not geo-blocked from Railway US',
+    others:     PROXY_URL ? 'browser scraping via proxy' : 'need PROXY_URL for reliable prices',
+  },
 }));
 
 /* ─── GET /api/version — runtime info ──────────────────────────── */
