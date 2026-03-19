@@ -321,12 +321,13 @@ const DEMO_CATALOG = [
     ],
   },
   {
-    keywords: ['rice', 'أرز', 'ارز', 'بسمتي', 'السله', 'الكيف'],
+    keywords: ['rice', 'أرز', 'ارز', 'بسمتي', 'السله', 'الكيف', 'شعلان', 'الشعلان', 'عنبر', 'ياسمين', 'مصري', 'ردة'],
     products: [
+      { name: 'أرز الشعلان بسمتي ١٠ كجم',           price: 67.95, image: '', url: '#' },
+      { name: 'أرز الشعلان بسمتي ٥ كجم',            price: 36.50, image: '', url: '#' },
       { name: 'أرز السلة بسمتي ٢ كجم',              price: 14.95, image: '', url: '#' },
       { name: 'أرز الكيف بسمتي طويل الحبة ٥ كجم',  price: 32.50, image: '', url: '#' },
       { name: 'أرز المراعي بسمتي ١ كجم',            price:  8.75, image: '', url: '#' },
-      { name: 'أرز تمر هندي بسمتي ٢ كجم',           price: 13.25, image: '', url: '#' },
     ],
   },
   {
@@ -1463,7 +1464,10 @@ async function runScrape(query) {
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
   if (totalProducts === 0) {
-    console.log(`[scrape] "${query}" — all stores returned 0. proxy=${PROXY_URL ? 'set' : 'none'}. Check /api/test-proxy and /api/debug-search`);
+    console.log(`[scrape] "${query}" — all stores returned 0. proxy=${PROXY_URL ? 'set' : 'none'}. Falling back to demo data.`);
+    // No proxy + all geo-blocked → show demo data so users see something useful
+    const fallback = await runDemoScrape(query);
+    return { ...fallback, demo: 'fallback' };
   }
 
   return {
