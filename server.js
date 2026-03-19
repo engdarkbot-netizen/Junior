@@ -1404,7 +1404,7 @@ async function runScrape(query) {
       const apiCount = apiResults.reduce((n, r) => n + r.products.length, 0);
       if (apiCount > 0) {
         console.log(`[scrape] Demo mode but direct-API returned ${apiCount} real products`);
-        const demoData = runDemoScrape(query);
+        const demoData = await runDemoScrape(query);
         const apiMap = Object.fromEntries(apiResults.map(r => [r.storeId, r]));
         return {
           ...demoData,
@@ -1418,7 +1418,7 @@ async function runScrape(query) {
         };
       }
     }
-    return runDemoScrape(query);
+    return await runDemoScrape(query);
   }
 
   const storeResults = await Promise.all(STORES.map(store => scrapeStore(store, query)));
