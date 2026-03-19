@@ -1185,9 +1185,9 @@ const STORES = [
     // No auth required for anonymous product search; directOk=globally accessible
     directOk: true,
     apiUrls: [
-      { url: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
-        headers: { 'Accept': 'application/json' } },
       { url: q => `https://www.carrefourksa.com/occ/v2/mafsau/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+      { url: q => `https://www.carrefourksa.com/mafsau/v2/products/search?query=${encodeURIComponent(q)}&lang=en&curr=SAR&pageSize=20&fields=FULL`,
         headers: { 'Accept': 'application/json' } },
     ],
     url:  q => `https://www.carrefourksa.com/mafsau/en/search?q=${encodeURIComponent(q)}&searchType=regular`,
