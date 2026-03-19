@@ -18,6 +18,7 @@ const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
 const { chromium, request: playwrightRequest } = require('playwright');
+const { ProxyAgent } = require('undici');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
 const MAX_QUERY_LEN = 200;
@@ -631,29 +632,57 @@ async function getApiCtx(useProxy = true) {
   return _apiCtxDirect;
 }
 
-// directOk=true: try direct first (globally-accessible APIs), then proxy on failure
-async function fetchJsonApi(url, extraHeaders = {}, directOk = false) {
-  // Try direct connection for globally-accessible endpoints (faster, proxy-independent)
-  if (directOk) {
-    try {
-      const ctx  = await getApiCtx(false);
-      const resp = await ctx.get(url, { headers: extraHeaders, timeout: 15000 });
-      if (resp.ok()) return await resp.json().catch(() => null);
-    } catch (_) {}
-    // fall through to proxy attempt
+// Build proxy dispatcher (cached singleton)
+let _proxyDispatcher = null;
+function getProxyDispatcher() {
+  if (!PROXY_URL || _proxyDispatcher) return _proxyDispatcher;
+  const proxyUrl = (PROXY_USER && PROXY_PASS)
+    ? PROXY_URL.replace('://', `://${encodeURIComponent(PROXY_USER)}:${encodeURIComponent(PROXY_PASS)}@`)
+    : PROXY_URL;
+  _proxyDispatcher = new ProxyAgent(proxyUrl);
+  return _proxyDispatcher;
+}
+
+// Native fetch with AbortController — reliable timeouts, no Playwright dependency
+async function nativeFetch(url, headers = {}, timeoutMs = 10000, useProxy = false) {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  const opts = {
+    headers: { 'User-Agent': BASE_UA, ...BASE_HEADERS, ...headers },
+    signal: ac.signal,
+    redirect: 'follow',
+  };
+  if (useProxy) {
+    const dispatcher = getProxyDispatcher();
+    if (dispatcher) opts.dispatcher = dispatcher;
   }
   try {
-    const ctx  = await getApiCtx(true);
-    const resp = await ctx.get(url, { headers: extraHeaders, timeout: 20000 });
-    if (!resp.ok()) {
-      console.log(`[api] ${resp.status()} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+    const resp = await fetch(url, opts);
+    clearTimeout(timer);
+    if (!resp.ok) {
+      console.log(`[api] ${resp.status} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
       return null;
     }
-    return await resp.json().catch(() => null);
+    const text = await resp.text();
+    try { return JSON.parse(text); } catch { return null; }
   } catch (err) {
-    console.log(`[api] fetch failed: ${err.message.split('\n')[0]}`);
+    clearTimeout(timer);
+    const msg = err.name === 'AbortError' ? `Timeout ${timeoutMs}ms` : err.message.split('\n')[0];
+    console.log(`[api] fetch failed (${useProxy ? 'proxy' : 'direct'}): ${msg} — ${url.split('?')[0].split('/').slice(-2).join('/')}`);
     return null;
   }
+}
+
+// directOk=true: try direct first (globally-accessible APIs), then proxy on failure
+async function fetchJsonApi(url, extraHeaders = {}, directOk = false) {
+  // Try direct connection first for globally-accessible endpoints
+  if (directOk) {
+    const json = await nativeFetch(url, extraHeaders, 10000, false);
+    if (json) return json;
+    // fall through to proxy attempt
+  }
+  // Try via proxy (or direct if no proxy configured)
+  return await nativeFetch(url, extraHeaders, 12000, !!PROXY_URL);
 }
 
 /* ─── Browser concurrency limiter ─────────────────────────────── */
@@ -1602,16 +1631,13 @@ app.get('/api/self-test', async (req, res) => {
   // Hard deadline — fires no matter what
   const deadlineTimer = setTimeout(sendResponse, DEADLINE);
 
-  // Helper: quick fetch with short timeout (no directOk fallback chain)
+  // Helper: quick fetch using native fetch (reliable timeouts)
   async function quickFetch(url, headers) {
     const t0 = Date.now();
     try {
-      const ctx = await getApiCtx(false); // always direct for self-test speed
-      const resp = await ctx.get(url, { headers, timeout: 10000 });
+      const json = await nativeFetch(url, headers, 10000, false);
       const ms = Date.now() - t0;
-      if (!resp.ok()) return { status: 'http_' + resp.status(), ms };
-      const json = await resp.json().catch(() => null);
-      if (!json) return { status: 'parse_error', ms };
+      if (!json) return { status: ms >= 9500 ? 'timeout' : 'null_response', ms };
       return { status: 'ok', json, ms };
     } catch (e) {
       return { status: 'error', error: e.message.split('\n')[0], ms: Date.now() - t0 };
@@ -1622,32 +1648,28 @@ app.get('/api/self-test', async (req, res) => {
     // Launch everything in parallel
     const allPromises = [];
 
-    // Proxy check
+    // Proxy check (using native fetch)
     if (PROXY_URL) {
       const proxyHost = PROXY_URL.replace(/\/\/[^@]*@/, '//***@').replace(/:\d+$/, ':***');
       allPromises.push((async () => {
+        const t0 = Date.now();
         try {
-          const ctx = await getApiCtx(true);
-          const t0 = Date.now();
-          const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 6000 });
-          const json = resp.ok() ? await resp.json().catch(() => null) : null;
+          const json = await nativeFetch('https://api.ipify.org?format=json', {}, 6000, true);
           results.proxyStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
         } catch (e) {
-          results.proxyStatus = { ok: false, error: e.message.split('\n')[0], host: proxyHost };
+          results.proxyStatus = { ok: false, error: e.message.split('\n')[0], ms: Date.now() - t0, host: proxyHost };
         }
       })());
     }
 
-    // Direct check
+    // Direct check (using native fetch)
     allPromises.push((async () => {
+      const t0 = Date.now();
       try {
-        const ctx = await getApiCtx(false);
-        const t0 = Date.now();
-        const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 6000 });
-        const json = resp.ok() ? await resp.json().catch(() => null) : null;
+        const json = await nativeFetch('https://api.ipify.org?format=json', {}, 6000, false);
         results.directStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
       } catch (e) {
-        results.directStatus = { ok: false, error: e.message.split('\n')[0] };
+        results.directStatus = { ok: false, error: e.message.split('\n')[0], ms: Date.now() - t0 };
       }
     })());
 
