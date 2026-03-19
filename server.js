@@ -1571,6 +1571,24 @@ app.get('/api/debug-search', async (req, res) => {
   });
 });
 
+/* ─── GET /api/ping — simple proxy connectivity check ──────────── */
+app.get('/api/ping', async (req, res) => {
+  const result = { proxyConfigured: !!PROXY_URL, proxy: null, direct: null };
+  try {
+    const ctx = await getApiCtx(false);
+    const r = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+    result.direct = r.ok() ? { ok: true, ip: (await r.json().catch(() => ({}))).ip } : { ok: false, status: r.status() };
+  } catch (e) { result.direct = { ok: false, error: e.message.split('\n')[0] }; }
+  if (PROXY_URL) {
+    try {
+      const ctx = await getApiCtx(true);
+      const r = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+      result.proxy = r.ok() ? { ok: true, ip: (await r.json().catch(() => ({}))).ip } : { ok: false, status: r.status() };
+    } catch (e) { result.proxy = { ok: false, error: e.message.split('\n')[0] }; }
+  }
+  res.json(result);
+});
+
 /* ─── GET /api/self-test — tests all direct APIs from this server ─ */
 app.get('/api/self-test', async (req, res) => {
   const query = (req.query.q || 'حليب المراعي').trim();
@@ -1661,25 +1679,30 @@ app.get('/api/self-test', async (req, res) => {
     // All stores — each in parallel, only test FIRST endpoint (speed)
     STORES.forEach((store, idx) => {
       allPromises.push((async () => {
-        const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
-        if (endpoints.length === 0) { results.stores[idx].pending = false; return; }
-        const ep = endpoints[0]; // only first endpoint for speed
-        const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
-        const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
-        const url = urlFn(query);
-        const result = await quickFetch(url, headers);
-        if (sent) return; // deadline already fired
-        const products = result.json ? extractFromApiJson(result.json, store.id) : [];
-        results.stores[idx] = {
-          store: store.id, name: store.name, directOk: store.directOk || false,
-          endpoints: [{ url: url.split('?')[0], status: result.status,
-                       ...(result.error ? { error: result.error } : {}),
-                       products: products.length, ms: result.ms,
-                       sample: products[0] ? { name: products[0].name, price: products[0].price } : null }],
-          totalFound: products.length,
-          sample: products.slice(0, 2),
-          pending: false,
-        };
+        try {
+          const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
+          if (endpoints.length === 0) { results.stores[idx].pending = false; return; }
+          const ep = endpoints[0];
+          const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
+          if (typeof urlFn !== 'function') { results.stores[idx] = { store: store.id, name: store.name, endpoints: [{ status: 'bad_url_fn' }], totalFound: 0, pending: false }; return; }
+          const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
+          const url = urlFn(query);
+          const result = await quickFetch(url, headers);
+          if (sent) return;
+          const products = result.json ? extractFromApiJson(result.json, store.id) : [];
+          results.stores[idx] = {
+            store: store.id, name: store.name, directOk: store.directOk || false,
+            endpoints: [{ url: url.split('?')[0], status: result.status,
+                         ...(result.error ? { error: result.error } : {}),
+                         products: products.length, ms: result.ms,
+                         sample: products[0] ? { name: products[0].name, price: products[0].price } : null }],
+            totalFound: products.length,
+            sample: products.slice(0, 2),
+            pending: false,
+          };
+        } catch (e) {
+          results.stores[idx] = { store: store.id, name: store.name, endpoints: [{ status: 'error', error: e.message.split('\n')[0] }], totalFound: 0, pending: false };
+        }
       })());
     });
 
