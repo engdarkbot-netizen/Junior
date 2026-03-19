@@ -2289,9 +2289,21 @@ function renderResults(data, ms) {
     return;
   }
 
-  // Demo notice banner
+  // Demo notice banner — show when any store has estimated prices
   const demoNotice = $('demo-notice');
-  if (data.demo) {
+  const liveCount = (data.stores || []).filter(s => s.source && s.source !== 'estimated').length;
+  const estCount  = (data.stores || []).filter(s => s.source === 'estimated').length;
+  if (data.demo || estCount > 0) {
+    const enText = liveCount > 0
+      ? `${liveCount} store(s) returned live prices. ${estCount} store(s) show estimated prices (marked ~est).`
+      : `All prices are estimated. Set PROXY_URL for a Saudi residential proxy to fetch live prices.`;
+    const arText = liveCount > 0
+      ? `${liveCount} متجر(متاجر) أرجع أسعار حية. ${estCount} متجر(متاجر) يعرض أسعار تقديرية (مُعَلَّمة ~est).`
+      : `جميع الأسعار تقديرية. قم بتعيين PROXY_URL لبروكسي سعودي للحصول على الأسعار الحية.`;
+    const demoEn = demoNotice.querySelector('.demo-en');
+    const demoAr = demoNotice.querySelector('.demo-ar');
+    if (demoEn) demoEn.textContent = enText;
+    if (demoAr) demoAr.textContent = arText;
     demoNotice.classList.add('visible');
   } else {
     demoNotice.classList.remove('visible');
@@ -2307,7 +2319,11 @@ function renderResults(data, ms) {
   let meta = `${totalProducts} products · ${storesWithProducts.length} of ${STORES.length} stores`;
   if (ms) meta += ` · ${ms < 1000 ? ms + 'ms' : (ms/1000).toFixed(1) + 's'}`;
   if (data.cached) meta += ` <span class="cache-badge">⚡ cached</span>`;
-  if (data.demo) meta += ` <span class="cache-badge" style="background:#b45309;color:#fef3c7" title="Live data requires deployment with internet access">🎭 demo data</span>`;
+  if (estCount > 0 && liveCount > 0) {
+    meta += ` <span class="cache-badge" style="background:#b45309;color:#fef3c7" title="Some stores returned estimated prices">${liveCount} live / ${estCount} estimated</span>`;
+  } else if (data.demo || estCount > 0) {
+    meta += ` <span class="cache-badge" style="background:#b45309;color:#fef3c7" title="All prices are estimated">~estimated prices</span>`;
+  }
   $('resultsMeta').innerHTML = meta;
 
   // Store filter bar
@@ -2422,13 +2438,13 @@ function renderResults(data, ms) {
 
     // Price rows (sorted cheapest first)
     const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
-    const isDemo = !!data.demo;
-    const qualityBadge = isDemo
-      ? `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable">~est</span>`
-      : `<span class="data-quality-badge live" title="Live price from store">live</span>`;
     const priceRows = rowsSorted.map((sp, i) => {
       const isBest  = sp.product.price === minPrice;
       const barPct  = 100 - ((sp.product.price - minPrice) / pRange) * 80;
+      const isEstimated = sp.store.source === 'estimated';
+      const qualityBadge = isEstimated
+        ? `<span class="data-quality-badge estimated" title="Estimated price — live scraping unavailable for this store">~est</span>`
+        : `<span class="data-quality-badge live" title="Live price from store">live</span>`;
       return `
         <div class="price-row ${isBest ? 'best' : ''}">
           <div class="store-icon-wrap" style="background:${sp.store.color}18; color:${sp.store.color}">

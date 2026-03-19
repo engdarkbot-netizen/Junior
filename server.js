@@ -293,22 +293,20 @@ if (process.env.FORCE_DEMO === '1' || process.env.FORCE_DEMO === 'true') {
 }
 
 if (!PROXY_URL) {
-  DEMO_MODE = true;
-  DEMO_REASON = 'no_proxy';
-  console.log('⚠️  No PROXY_URL set — running in DEMO MODE (Saudi stores require a Saudi residential proxy)');
-} else {
-  // Only test browser when a proxy is configured and scraping may work
-  (async () => {
-    try {
-      const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-      await testBrowser.close();
-    } catch (_) {
-      DEMO_MODE = true;
-      DEMO_REASON = 'browser_unavailable';
-      console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
-    }
-  })();
+  console.log('⚠️  No PROXY_URL set — scraping will be attempted without proxy (some stores may block non-Saudi IPs)');
 }
+
+// Always test browser availability (scraping should be attempted with or without proxy)
+(async () => {
+  try {
+    const testBrowser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+    await testBrowser.close();
+  } catch (_) {
+    DEMO_MODE = true;
+    DEMO_REASON = 'browser_unavailable';
+    console.log('⚠️  Playwright/Chromium unavailable — running in DEMO MODE (mock data)');
+  }
+})();
 
 // Each category entry: keywords (Arabic/English) that map to its products
 const DEMO_CATALOG = [
@@ -594,6 +592,7 @@ async function runDemoScrape(query) {
       emoji:    s.emoji,
       color:    s.color,
       products: getDemoProducts(query, s.id),
+      source:   'estimated',
       error:    null,
     })),
   };
@@ -1084,10 +1083,12 @@ async function scrapeStore(store, query) {
     } else {
       result.products = await extractProducts(page, store.name);
     }
-    console.log(`[${store.id}] "${query}" → ${result.products.length} products${capturedApiProducts.length ? ' (API)' : ' (DOM)'}`);
+    result.source = capturedApiProducts.length ? 'api' : 'dom';
+    console.log(`[${store.id}] "${query}" → ${result.products.length} products (${result.source})`);
 
   } catch (err) {
     result.error = err.message.split('\n')[0];
+    result.source = 'error';
     if (browserInstance && !browserInstance.isConnected()) {
       browserInstance = null;
     }
@@ -1107,24 +1108,36 @@ async function runScrape(query) {
 
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
-  // If no products found from any store (likely bot-blocked), fall back to demo
-  if (totalProducts === 0) {
-    console.log(`[scrape] No products found for "${query}" — falling back to demo data`);
-    return runDemoScrape(query);
-  }
-
-  return {
-    query,
-    timestamp: new Date().toISOString(),
-    stores: storeResults.map(sr => ({
+  // Per-store fallback: only fill in demo data for stores that returned nothing,
+  // and mark them transparently so the frontend can show live vs estimated badges
+  let demoFallbackUsed = false;
+  const stores = storeResults.map(sr => {
+    const hasLiveData = sr.products && sr.products.length > 0;
+    if (!hasLiveData) {
+      demoFallbackUsed = true;
+      console.log(`[scrape] ${sr.storeId}: no live products for "${query}" — filling with estimated prices`);
+    }
+    return {
       id:       sr.storeId,
       name:     sr.storeName,
       ar:       sr.storeAr,
       emoji:    sr.storeEmoji,
       color:    sr.storeColor,
-      products: sr.products,
+      products: hasLiveData ? sr.products : getDemoProducts(query, sr.storeId),
+      source:   hasLiveData ? (sr.source || 'live') : 'estimated',
       error:    sr.error,
-    })),
+    };
+  });
+
+  if (totalProducts === 0) {
+    console.log(`[scrape] No live products found for "${query}" from any store — all prices are estimated`);
+  }
+
+  return {
+    query,
+    timestamp: new Date().toISOString(),
+    demo: demoFallbackUsed || undefined,
+    stores,
   };
 }
 
@@ -1226,7 +1239,7 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
       const storeData = {
         id: store.id, name: store.name, ar: store.ar,
         emoji: store.emoji, color: store.color,
-        products: getDemoProducts(query, store.id), error: null,
+        products: getDemoProducts(query, store.id), source: 'estimated', error: null,
       };
       write('store', storeData);
       allResults.push(storeData);
@@ -1234,13 +1247,19 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
   } else {
     const results = await Promise.all(STORES.map(store =>
       scrapeStore(store, query).then(sr => {
+        const hasLiveData = sr.products && sr.products.length > 0;
+        if (!hasLiveData) {
+          usedDemoFallback = true;
+          console.log(`[stream] ${sr.storeId}: no live products for "${query}" — filling with estimated prices`);
+        }
         const storeData = {
           id:       sr.storeId,
           name:     sr.storeName,
           ar:       sr.storeAr,
           emoji:    sr.storeEmoji,
           color:    sr.storeColor,
-          products: sr.products,
+          products: hasLiveData ? sr.products : getDemoProducts(query, sr.storeId),
+          source:   hasLiveData ? (sr.source || 'live') : 'estimated',
           error:    sr.error,
         };
         write('store', storeData);
@@ -1248,20 +1267,6 @@ app.get('/api/search/stream', rateLimit, async (req, res) => {
       })
     ));
     allResults.push(...results);
-
-    // If all stores came back empty, replace results with demo data
-    const totalProducts = allResults.reduce((sum, s) => sum + (s.products?.length || 0), 0);
-    if (totalProducts === 0) {
-      console.log(`[stream] No products found for "${query}" — falling back to demo data`);
-      for (let i = 0; i < allResults.length; i++) {
-        allResults[i] = {
-          ...allResults[i],
-          products: getDemoProducts(query, allResults[i].id),
-          error: null,
-        };
-      }
-      usedDemoFallback = true;
-    }
   }
 
   const finalData = { query, timestamp: new Date().toISOString(), demo: DEMO_MODE || usedDemoFallback || undefined, stores: allResults };
