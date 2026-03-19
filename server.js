@@ -1569,6 +1569,14 @@ app.get('/api/self-test', async (req, res) => {
   const query = (req.query.q || 'حليب المراعي').trim();
   const started = Date.now();
 
+  // Hard timeout wrapper — defeats OS-level TCP hangs that ignore Playwright timeouts
+  function hardTimeout(promise, ms, fallback) {
+    return Promise.race([
+      promise,
+      new Promise(resolve => setTimeout(() => resolve(fallback), ms)),
+    ]);
+  }
+
   // Helper: fetch with explicit timeout/error distinction
   async function testFetch(url, headers, directOk) {
     const t0 = Date.now();
@@ -1576,7 +1584,6 @@ app.get('/api/self-test', async (req, res) => {
       const json = await fetchJsonApi(url, headers, directOk);
       const ms = Date.now() - t0;
       if (json === null) {
-        // Could be non-2xx, JSON parse fail, or timeout — distinguish by ms
         return { status: ms >= 19800 ? 'timeout' : 'null_response', ms };
       }
       return { status: 'ok', json, ms };
@@ -1585,34 +1592,45 @@ app.get('/api/self-test', async (req, res) => {
     }
   }
 
-  // Test proxy connectivity first (5s timeout)
+  // Test proxy connectivity (hard 10s cap)
   let proxyStatus = null;
   if (PROXY_URL) {
     const proxyHost = PROXY_URL.replace(/\/\/[^@]*@/, '//***@').replace(/:\d+$/, ':***');
-    try {
-      const ctx = await getApiCtx(true);
-      const t0 = Date.now();
-      const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
-      const json = resp.ok() ? await resp.json().catch(() => null) : null;
-      proxyStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
-    } catch (e) {
-      proxyStatus = { ok: false, error: e.message.split('\n')[0], host: proxyHost };
-    }
+    proxyStatus = await hardTimeout(
+      (async () => {
+        try {
+          const ctx = await getApiCtx(true);
+          const t0 = Date.now();
+          const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+          const json = resp.ok() ? await resp.json().catch(() => null) : null;
+          return { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
+        } catch (e) {
+          return { ok: false, error: e.message.split('\n')[0], host: proxyHost };
+        }
+      })(),
+      10000,
+      { ok: false, error: 'hard timeout (10s)', host: proxyHost }
+    );
   }
 
-  // Test direct (no-proxy) connectivity
-  let directStatus = null;
-  try {
-    const ctx = await getApiCtx(false);
-    const t0 = Date.now();
-    const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
-    const json = resp.ok() ? await resp.json().catch(() => null) : null;
-    directStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
-  } catch (e) {
-    directStatus = { ok: false, error: e.message.split('\n')[0] };
-  }
+  // Test direct (no-proxy) connectivity (hard 10s cap)
+  const directStatus = await hardTimeout(
+    (async () => {
+      try {
+        const ctx = await getApiCtx(false);
+        const t0 = Date.now();
+        const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 8000 });
+        const json = resp.ok() ? await resp.json().catch(() => null) : null;
+        return { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
+      } catch (e) {
+        return { ok: false, error: e.message.split('\n')[0] };
+      }
+    })(),
+    10000,
+    { ok: false, error: 'hard timeout (10s)' }
+  );
 
-  // Run all stores in parallel
+  // Run all stores in parallel, each endpoint capped at 22s
   const storeResults = await Promise.all(STORES.map(async store => {
     const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
     const epResults = [];
@@ -1622,7 +1640,11 @@ app.get('/api/self-test', async (req, res) => {
       const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
       const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
       const url = urlFn(query);
-      const result = await testFetch(url, headers, store.directOk || false);
+      const result = await hardTimeout(
+        testFetch(url, headers, store.directOk || false),
+        22000,
+        { status: 'timeout', ms: 22000 }
+      );
       const products = result.json ? extractFromApiJson(result.json, store.id) : [];
       epResults.push({ url: url.split('?')[0], status: result.status,
                        ...(result.error ? { error: result.error } : {}),
