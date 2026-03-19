@@ -1199,12 +1199,13 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
-    // Salla platform REST API — try both common Salla endpoint patterns
+    // Panda — custom/Oracle platform; 429 confirms endpoint exists but rate-limits direct IP
+    // Needs proxy for reliable access; better headers reduce 429 chance
     apiUrls: [
       { url: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&include[]=price&page_size=20`,
-        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
-      { url: q => `https://www.panda.com.sa/api/v2/products?search=${encodeURIComponent(q)}&per_page=20`,
-        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Referer': 'https://www.panda.com.sa/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' } },
+      { url: q => `https://www.panda.com.sa/api/v1/products?q=${encodeURIComponent(q)}&limit=20`,
+        headers: { 'Accept': 'application/json', 'Referer': 'https://www.panda.com.sa/' } },
     ],
     url:  q => `https://www.panda.com.sa/en/search?q=${encodeURIComponent(q)}`,
     waitFor: 'salla-product-card, .salla-product-card, .product-card, [class*="product"]',
@@ -1227,15 +1228,15 @@ const STORES = [
     ar:   'لولو',
     emoji: '🟢',
     color: '#2a9d8f',
-    // LuLu — Oracle Commerce Cloud OCC API (try direct, then proxy)
+    // LuLu — Oracle CX Commerce; /ccstore/v1/ is the newer context root (was /ccstoreui/)
     directOk: true,
     apiUrls: [
-      { url: q => `https://www.luluhypermarket.com/ccstoreui/v1/search?Nrpp=20&Ntt=${encodeURIComponent(q)}&lang=en&country=SA`,
-        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
-      { url: q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}&ajax=1`,
+      { url: q => `https://gcc.luluhypermarket.com/ccstore/v1/search?Ntt=${encodeURIComponent(q)}&Nrpp=20&No=0`,
+        headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' } },
+      { url: q => `https://www.luluhypermarket.com/ccstore/v1/search?Ntt=${encodeURIComponent(q)}&Nrpp=20&No=0`,
         headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } },
     ],
-    url:  q => `https://www.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
+    url:  q => `https://gcc.luluhypermarket.com/en-sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-item, .product-card, li.product, [class*="product"]',
   },
   {
@@ -1244,11 +1245,16 @@ const STORES = [
     ar:   'التميمي',
     emoji: '🏪',
     color: '#457b9d',
-    // Shopify Storefront API — no auth, globally accessible (no proxy needed)
+    // ZopSmart platform (confirmed via Android app com.zopsmart.scarlet)
+    // Main storefront is shop.tamimimarkets.com, not www
     directOk: true,
-    apiUrl: q => `https://www.tamimimarkets.com/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
-    apiHeaders: { 'Accept': 'application/json' },
-    url:  q => `https://www.tamimimarkets.com/search?type=product&q=${encodeURIComponent(q)}`,
+    apiUrls: [
+      { url: q => `https://shop.tamimimarkets.com/api/v2/products?keyword=${encodeURIComponent(q)}&page=1&pageSize=20`,
+        headers: { 'Accept': 'application/json', 'Referer': 'https://shop.tamimimarkets.com/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' } },
+      { url: q => `https://shop.tamimimarkets.com/api/v1/products/search?q=${encodeURIComponent(q)}&limit=20`,
+        headers: { 'Accept': 'application/json', 'Referer': 'https://shop.tamimimarkets.com/' } },
+    ],
+    url:  q => `https://shop.tamimimarkets.com/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .grid__item, .product-item, [class*="ProductItem"]',
   },
   {
@@ -1257,9 +1263,8 @@ const STORES = [
     ar:   'العثيم',
     emoji: '🟡',
     color: '#f4a261',
-    // Try Shopify suggest.json — Othaim website may be on Shopify
-    apiUrl: q => `https://www.othaim.com.sa/search/suggest.json?q=${encodeURIComponent(q)}&resources[type]=product&resources[options][limit]=10`,
-    apiHeaders: { 'Accept': 'application/json' },
+    // Othaim uses a custom platform (not Shopify/Salla) — corporate site only
+    // Online grocery via Amazon.sa partnership; skip direct API, use browser scrape only
     url:  q => `https://www.othaim.com.sa/search?q=${encodeURIComponent(q)}`,
     waitFor: '.product-card, .product-item, .product, [class*="product"]',
   },
