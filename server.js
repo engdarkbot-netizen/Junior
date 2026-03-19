@@ -679,7 +679,8 @@ async function fetchJsonApi(url, extraHeaders = {}, directOk = false) {
   if (directOk) {
     const json = await nativeFetch(url, extraHeaders, 10000, false);
     if (json) return json;
-    // fall through to proxy attempt
+    // Only fall through to proxy if one is configured — no point retrying direct
+    if (!PROXY_URL) return null;
   }
   // Try via proxy (or direct if no proxy configured)
   return await nativeFetch(url, extraHeaders, 12000, !!PROXY_URL);
@@ -1334,6 +1335,13 @@ async function scrapeStore(store, query) {
   }
 
   // ── Tier 2: full browser scrape ───────────────────────────────
+  // Skip browser entirely when no proxy — Saudi stores block non-Saudi IPs,
+  // so browser scraping from a US datacenter will always fail (and waste 20s+).
+  if (!PROXY_URL) {
+    result.error = 'no_proxy';
+    return result;
+  }
+
   let page = null;
   const capturedApiProducts = [];
 
