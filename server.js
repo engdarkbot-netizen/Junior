@@ -1710,20 +1710,10 @@ app.get('/api/self-test', async (req, res) => {
     clearTimeout(deadlineTimer);
     sendResponse();
   } catch (e) {
+    console.error('[self-test error]', e.message);
     clearTimeout(deadlineTimer);
-    sendResponse();
+    if (!sent) sendResponse();
   }
-
-  res.json({
-    query,
-    demo: DEMO_MODE,
-    proxyConfigured: !!PROXY_URL,
-    proxyStatus,
-    directStatus,
-    totalMs: Date.now() - started,
-    stores: storeResults,
-    summary: storeResults.map(s => `${s.store}: ${s.totalFound} products`).join(' | '),
-  });
 });
 
 /* ─── GET /api/search — cached, deduplicated ───────────────────── */
