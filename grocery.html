@@ -2424,7 +2424,7 @@ function renderResults(data, ms) {
 
     // Price rows (sorted cheapest first)
     const rowsSorted = [...storeProducts].sort((a, b) => a.product.price - b.product.price);
-    const isFullDemo = data.demo === true || data.demo === 'fallback';
+    const isFullDemo = data.demo === true;
     const priceRows = rowsSorted.map((sp, i) => {
       // Per-store quality badge: check isReal when in partial mode
       const isLive = !isFullDemo && (data.demo !== 'partial' || sp.store.isReal !== false);

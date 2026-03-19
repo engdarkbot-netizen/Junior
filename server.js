@@ -18,7 +18,6 @@ const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
 const { chromium, request: playwrightRequest } = require('playwright');
-const { ProxyAgent } = require('undici');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
 const MAX_QUERY_LEN = 200;
@@ -633,58 +632,28 @@ async function getApiCtx(useProxy = true) {
   return _apiCtxDirect;
 }
 
-// Build proxy dispatcher (cached singleton)
-let _proxyDispatcher = null;
-function getProxyDispatcher() {
-  if (!PROXY_URL || _proxyDispatcher) return _proxyDispatcher;
-  const proxyUrl = (PROXY_USER && PROXY_PASS)
-    ? PROXY_URL.replace('://', `://${encodeURIComponent(PROXY_USER)}:${encodeURIComponent(PROXY_PASS)}@`)
-    : PROXY_URL;
-  _proxyDispatcher = new ProxyAgent(proxyUrl);
-  return _proxyDispatcher;
-}
-
-// Native fetch with AbortController — reliable timeouts, no Playwright dependency
-async function nativeFetch(url, headers = {}, timeoutMs = 10000, useProxy = false) {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  const opts = {
-    headers: { 'User-Agent': BASE_UA, ...BASE_HEADERS, ...headers },
-    signal: ac.signal,
-    redirect: 'follow',
-  };
-  if (useProxy) {
-    const dispatcher = getProxyDispatcher();
-    if (dispatcher) opts.dispatcher = dispatcher;
-  }
-  try {
-    const resp = await fetch(url, opts);
-    clearTimeout(timer);
-    if (!resp.ok) {
-      console.log(`[api] ${resp.status} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
-      return null;
-    }
-    const text = await resp.text();
-    try { return JSON.parse(text); } catch { return null; }
-  } catch (err) {
-    clearTimeout(timer);
-    const msg = err.name === 'AbortError' ? `Timeout ${timeoutMs}ms` : err.message.split('\n')[0];
-    console.log(`[api] fetch failed (${useProxy ? 'proxy' : 'direct'}): ${msg} — ${url.split('?')[0].split('/').slice(-2).join('/')}`);
-    return null;
-  }
-}
-
 // directOk=true: try direct first (globally-accessible APIs), then proxy on failure
 async function fetchJsonApi(url, extraHeaders = {}, directOk = false) {
-  // Try direct connection first for globally-accessible endpoints
   if (directOk) {
-    const json = await nativeFetch(url, extraHeaders, 10000, false);
-    if (json) return json;
-    // Only fall through to proxy if one is configured — no point retrying direct
+    try {
+      const ctx  = await getApiCtx(false);
+      const resp = await ctx.get(url, { headers: extraHeaders, timeout: 15000 });
+      if (resp.ok()) return await resp.json().catch(() => null);
+    } catch (_) {}
     if (!PROXY_URL) return null;
   }
-  // Try via proxy (or direct if no proxy configured)
-  return await nativeFetch(url, extraHeaders, 12000, !!PROXY_URL);
+  try {
+    const ctx  = await getApiCtx(true);
+    const resp = await ctx.get(url, { headers: extraHeaders, timeout: 20000 });
+    if (!resp.ok()) {
+      console.log(`[api] ${resp.status()} from ${url.split('?')[0].split('/').slice(-2).join('/')}`);
+      return null;
+    }
+    return await resp.json().catch(() => null);
+  } catch (err) {
+    console.log(`[api] fetch failed: ${err.message.split('\n')[0]}`);
+    return null;
+  }
 }
 
 /* ─── Browser concurrency limiter ─────────────────────────────── */
@@ -1464,10 +1433,7 @@ async function runScrape(query) {
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
   if (totalProducts === 0) {
-    console.log(`[scrape] "${query}" — all stores returned 0. proxy=${PROXY_URL ? 'set' : 'none'}. Falling back to demo data.`);
-    // No proxy + all geo-blocked → show demo data so users see something useful
-    const fallback = await runDemoScrape(query);
-    return { ...fallback, demo: 'fallback' };
+    console.log(`[scrape] "${query}" — all stores returned 0. proxy=${PROXY_URL ? 'set' : 'none'}.`);
   }
 
   return {
