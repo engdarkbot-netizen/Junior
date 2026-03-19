@@ -1568,102 +1568,121 @@ app.get('/api/debug-search', async (req, res) => {
 app.get('/api/self-test', async (req, res) => {
   const query = (req.query.q || 'حليب المراعي').trim();
   const started = Date.now();
+  const DEADLINE = 15000; // Hard 15s deadline — send whatever's ready
 
-  // Hard timeout wrapper — defeats OS-level TCP hangs that ignore Playwright timeouts
-  function hardTimeout(promise, ms, fallback) {
-    return Promise.race([
-      promise,
-      new Promise(resolve => setTimeout(() => resolve(fallback), ms)),
-    ]);
+  // Mutable results that get populated as promises complete
+  const results = {
+    proxyStatus: null,
+    directStatus: null,
+    stores: STORES.map(s => ({ store: s.id, name: s.name, directOk: s.directOk || false,
+                                endpoints: [], totalFound: 0, sample: [], pending: true })),
+  };
+  let sent = false;
+
+  function sendResponse() {
+    if (sent) return;
+    sent = true;
+    const storeResults = results.stores.map(s => {
+      if (s.pending) return { ...s, endpoints: [{ status: 'deadline', ms: DEADLINE }], pending: undefined };
+      const { pending, ...rest } = s;
+      return rest;
+    });
+    res.json({
+      query,
+      demo: DEMO_MODE,
+      proxyConfigured: !!PROXY_URL,
+      proxyStatus: results.proxyStatus,
+      directStatus: results.directStatus,
+      totalMs: Date.now() - started,
+      stores: storeResults,
+      summary: storeResults.map(s => `${s.store}: ${s.totalFound || 0} products`).join(' | '),
+    });
   }
 
-  // Helper: fetch with explicit timeout/error distinction
-  async function testFetch(url, headers, directOk) {
+  // Hard deadline — fires no matter what
+  const deadlineTimer = setTimeout(sendResponse, DEADLINE);
+
+  // Helper: quick fetch with short timeout (no directOk fallback chain)
+  async function quickFetch(url, headers) {
     const t0 = Date.now();
     try {
-      const json = await fetchJsonApi(url, headers, directOk);
+      const ctx = await getApiCtx(false); // always direct for self-test speed
+      const resp = await ctx.get(url, { headers, timeout: 10000 });
       const ms = Date.now() - t0;
-      if (json === null) {
-        return { status: ms >= 19800 ? 'timeout' : 'null_response', ms };
-      }
+      if (!resp.ok()) return { status: 'http_' + resp.status(), ms };
+      const json = await resp.json().catch(() => null);
+      if (!json) return { status: 'parse_error', ms };
       return { status: 'ok', json, ms };
     } catch (e) {
       return { status: 'error', error: e.message.split('\n')[0], ms: Date.now() - t0 };
     }
   }
 
-  // Run proxy, direct, and ALL stores in parallel — everything capped
-  const proxyHost = PROXY_URL ? PROXY_URL.replace(/\/\/[^@]*@/, '//***@').replace(/:\d+$/, ':***') : null;
+  try {
+    // Launch everything in parallel
+    const allPromises = [];
 
-  const proxyPromise = PROXY_URL ? hardTimeout(
-    (async () => {
-      try {
-        const ctx = await getApiCtx(true);
-        const t0 = Date.now();
-        const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 6000 });
-        const json = resp.ok() ? await resp.json().catch(() => null) : null;
-        return { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
-      } catch (e) {
-        return { ok: false, error: e.message.split('\n')[0], host: proxyHost };
-      }
-    })(),
-    8000,
-    { ok: false, error: 'hard timeout (8s)', host: proxyHost }
-  ) : Promise.resolve(null);
+    // Proxy check
+    if (PROXY_URL) {
+      const proxyHost = PROXY_URL.replace(/\/\/[^@]*@/, '//***@').replace(/:\d+$/, ':***');
+      allPromises.push((async () => {
+        try {
+          const ctx = await getApiCtx(true);
+          const t0 = Date.now();
+          const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 6000 });
+          const json = resp.ok() ? await resp.json().catch(() => null) : null;
+          results.proxyStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0, host: proxyHost };
+        } catch (e) {
+          results.proxyStatus = { ok: false, error: e.message.split('\n')[0], host: proxyHost };
+        }
+      })());
+    }
 
-  const directPromise = hardTimeout(
-    (async () => {
+    // Direct check
+    allPromises.push((async () => {
       try {
         const ctx = await getApiCtx(false);
         const t0 = Date.now();
         const resp = await ctx.get('https://api.ipify.org?format=json', { timeout: 6000 });
         const json = resp.ok() ? await resp.json().catch(() => null) : null;
-        return { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
+        results.directStatus = { ok: !!json, ip: json?.ip, ms: Date.now() - t0 };
       } catch (e) {
-        return { ok: false, error: e.message.split('\n')[0] };
+        results.directStatus = { ok: false, error: e.message.split('\n')[0] };
       }
-    })(),
-    8000,
-    { ok: false, error: 'hard timeout (8s)' }
-  );
+    })());
 
-  const storesPromise = Promise.all(STORES.map(async store => {
-    const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
-    const epResults = [];
-    let gotProducts = [];
-
-    for (const ep of endpoints) {
-      const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
-      const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
-      const url = urlFn(query);
-      const result = await hardTimeout(
-        testFetch(url, headers, store.directOk || false),
-        12000,
-        { status: 'timeout', ms: 12000 }
-      );
-      const products = result.json ? extractFromApiJson(result.json, store.id) : [];
-      epResults.push({ url: url.split('?')[0], status: result.status,
+    // All stores — each in parallel, only test FIRST endpoint (speed)
+    STORES.forEach((store, idx) => {
+      allPromises.push((async () => {
+        const endpoints = store.apiUrls || (store.apiUrl ? [{ url: store.apiUrl, headers: store.apiHeaders }] : []);
+        if (endpoints.length === 0) { results.stores[idx].pending = false; return; }
+        const ep = endpoints[0]; // only first endpoint for speed
+        const urlFn = typeof ep === 'function' ? ep : (ep.url || ep);
+        const headers = (typeof ep === 'object' && ep.headers) ? ep.headers : (store.apiHeaders || {});
+        const url = urlFn(query);
+        const result = await quickFetch(url, headers);
+        if (sent) return; // deadline already fired
+        const products = result.json ? extractFromApiJson(result.json, store.id) : [];
+        results.stores[idx] = {
+          store: store.id, name: store.name, directOk: store.directOk || false,
+          endpoints: [{ url: url.split('?')[0], status: result.status,
                        ...(result.error ? { error: result.error } : {}),
                        products: products.length, ms: result.ms,
-                       sample: products[0] ? { name: products[0].name, price: products[0].price } : null });
-      if (products.length > 0 && gotProducts.length === 0) gotProducts = products.slice(0, 3);
-    }
+                       sample: products[0] ? { name: products[0].name, price: products[0].price } : null }],
+          totalFound: products.length,
+          sample: products.slice(0, 2),
+          pending: false,
+        };
+      })());
+    });
 
-    return { store: store.id, name: store.name, directOk: store.directOk || false,
-             endpoints: epResults, totalFound: gotProducts.length,
-             sample: gotProducts.slice(0, 2) };
-  }));
-
-  // All three run concurrently
-  const [proxyStatus, directStatus, storeResults] = await hardTimeout(
-    Promise.all([proxyPromise, directPromise, storesPromise]),
-    25000,
-    [
-      PROXY_URL ? { ok: false, error: 'global timeout (25s)', host: proxyHost } : null,
-      { ok: false, error: 'global timeout (25s)' },
-      STORES.map(s => ({ store: s.id, name: s.name, endpoints: [], totalFound: 0, sample: [] })),
-    ]
-  );
+    await Promise.all(allPromises);
+    clearTimeout(deadlineTimer);
+    sendResponse();
+  } catch (e) {
+    clearTimeout(deadlineTimer);
+    sendResponse();
+  }
 
   res.json({
     query,
