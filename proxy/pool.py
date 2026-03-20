@@ -122,18 +122,65 @@ async def fetch_source(session: aiohttp.ClientSession, source: dict) -> list[Pro
     return []
 
 
-async def validate_proxy(session: aiohttp.ClientSession, proxy: Proxy) -> Optional[Proxy]:
+async def validate_proxy(proxy: Proxy) -> Optional[Proxy]:
+    """
+    Validate proxy with a real CONNECT+TLS test (httpbin.org:443).
+    This ensures the proxy can actually tunnel HTTPS, not just HTTP.
+    """
     start = time.time()
     try:
-        async with session.get(
-            TEST_URL,
-            proxy=proxy.url,
-            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-            ssl=False,
-        ) as r:
-            if r.status == 200:
-                proxy.mark_success(latency=round(time.time() - start, 2))
-                return proxy
+        # Step 1: open TCP connection to proxy
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(proxy.host, proxy.port), timeout=TIMEOUT
+        )
+        # Step 2: send CONNECT
+        writer.write(b"CONNECT httpbin.org:443 HTTP/1.1\r\nHost: httpbin.org:443\r\n\r\n")
+        await writer.drain()
+
+        # Step 3: read response
+        resp = await asyncio.wait_for(reader.readline(), timeout=TIMEOUT)
+        if b"200" not in resp:
+            writer.close()
+            return None
+
+        # Drain headers
+        while True:
+            line = await asyncio.wait_for(reader.readline(), timeout=TIMEOUT)
+            if line in (b"\r\n", b"\n", b""):
+                break
+
+        # Step 4: TLS handshake through tunnel
+        import ssl
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        transport = writer.transport
+        loop = asyncio.get_event_loop()
+        tls_transport, _ = await asyncio.wait_for(
+            loop.start_tls(transport, asyncio.Protocol(), ctx, server_side=False, server_hostname="httpbin.org"),
+            timeout=TIMEOUT
+        )
+
+        # Step 5: send HTTP request through TLS
+        tls_transport.write(
+            b"GET /ip HTTP/1.1\r\nHost: httpbin.org\r\nConnection: close\r\n\r\n"
+        )
+
+        # Step 6: read response (just check first line)
+        resp_data = b""
+        for _ in range(10):
+            chunk = await asyncio.wait_for(reader.read(512), timeout=TIMEOUT)
+            if not chunk:
+                break
+            resp_data += chunk
+            if b"200" in resp_data or b"\r\n\r\n" in resp_data:
+                break
+
+        tls_transport.close()
+        if b"200" in resp_data or b'"origin"' in resp_data:
+            proxy.mark_success(latency=round(time.time() - start, 2))
+            return proxy
+
     except Exception:
         pass
     return None
@@ -141,19 +188,16 @@ async def validate_proxy(session: aiohttp.ClientSession, proxy: Proxy) -> Option
 
 async def validate_all(proxies: list[Proxy]) -> list[Proxy]:
     sem = asyncio.Semaphore(VALIDATE_CONCURRENCY)
-    connector = aiohttp.TCPConnector(limit=VALIDATE_CONCURRENCY, ssl=False)
 
-    async def guarded(session, proxy):
+    async def guarded(proxy):
         async with sem:
-            return await validate_proxy(session, proxy)
+            return await validate_proxy(proxy)
 
-    async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [guarded(session, p) for p in proxies]
-        results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*[guarded(p) for p in proxies])
 
     valid = [p for p in results if p is not None]
     valid.sort(key=lambda p: p.latency)
-    log.info(f"Validation complete: {len(valid)}/{len(proxies)} proxies alive")
+    log.info(f"Validation complete: {len(valid)}/{len(proxies)} proxies support HTTPS CONNECT")
     return valid
 
 
