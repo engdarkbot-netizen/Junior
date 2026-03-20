@@ -14,8 +14,9 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 
 TEST_URL = "https://httpbin.org/ip"
-TIMEOUT = 8
-VALIDATE_CONCURRENCY = 50
+TIMEOUT = 4
+VALIDATE_CONCURRENCY = 200
+MAX_PROXIES_TO_VALIDATE = 500   # cap to keep startup fast
 REFRESH_INTERVAL = 300  # seconds between pool refreshes
 
 
@@ -201,10 +202,16 @@ async def fetch_and_validate() -> list[Proxy]:
                 seen.add(key)
                 all_proxies.append(p)
 
-    log.info(f"Total unique proxies to validate: {len(all_proxies)}")
     if not all_proxies:
         log.warning("No proxies found from any source. Add proxies to proxies.txt to use a custom list.")
         return []
+
+    # Cap to avoid multi-minute validation
+    if len(all_proxies) > MAX_PROXIES_TO_VALIDATE:
+        import random
+        all_proxies = random.sample(all_proxies, MAX_PROXIES_TO_VALIDATE)
+
+    log.info(f"Total unique proxies to validate: {len(all_proxies)}")
     return await validate_all(all_proxies)
 
 
