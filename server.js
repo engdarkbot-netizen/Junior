@@ -17,6 +17,7 @@ const cors         = require('cors');
 const path         = require('path');
 const zlib         = require('zlib');
 const compression  = require('compression');
+const net          = require('net');
 const { chromium, request: playwrightRequest } = require('playwright');
 
 /* ─── Arabic/English query normaliser ──────────────────────────── */
@@ -1485,6 +1486,27 @@ app.get('/api/test-proxy', async (_req, res) => {
     return res.json({ ok: false, error: 'No PROXY_URL configured', proxy: null });
   }
   const results = {};
+
+  // Test 0: raw TCP connect to proxy host:port
+  const proxyUrl = new URL(PROXY_URL);
+  const proxyHost = proxyUrl.hostname;
+  const proxyPort = parseInt(proxyUrl.port, 10) || 3128;
+  results.tcpConnect = await new Promise(resolve => {
+    const sock = new net.Socket();
+    const timer = setTimeout(() => {
+      sock.destroy();
+      resolve({ ok: false, error: 'TCP timeout (5s)' });
+    }, 5000);
+    sock.connect(proxyPort, proxyHost, () => {
+      clearTimeout(timer);
+      sock.destroy();
+      resolve({ ok: true });
+    });
+    sock.on('error', err => {
+      clearTimeout(timer);
+      resolve({ ok: false, error: err.message });
+    });
+  });
 
   // Test 1: lightweight API context
   try {
