@@ -1166,6 +1166,7 @@ const STORES = [
     ar:   'نون',
     emoji: '⚫',
     color: '#f9c74f',
+    disabled: true, // requires Saudi proxy — geo-blocks non-SA IPs
     // Multiple Noon API patterns — try each until one returns products
     apiUrls: [
       { url: q => `https://www.noon.com/api/v1/search/?q=${encodeURIComponent(q)}&cat=grocery&locale=en-SA&limit=20`,
@@ -1200,6 +1201,7 @@ const STORES = [
     ar:   'بنده',
     emoji: '🐼',
     color: '#e63946',
+    disabled: true, // requires Saudi proxy — returns 429 from non-SA IPs
     // Panda — custom/Oracle platform; 429 confirms endpoint exists but rate-limits direct IP
     // Needs proxy for reliable access; better headers reduce 429 chance
     apiUrls: [
@@ -1264,6 +1266,7 @@ const STORES = [
     ar:   'العثيم',
     emoji: '🟡',
     color: '#f4a261',
+    disabled: true, // requires Saudi proxy — browser-only, no direct API
     // Othaim uses a custom platform (not Shopify/Salla) — corporate site only
     // Online grocery via Amazon.sa partnership; skip direct API, use browser scrape only
     url:  q => `https://www.othaim.com.sa/search?q=${encodeURIComponent(q)}`,
@@ -1411,7 +1414,7 @@ async function runScrape(query) {
   // stores (Tamimi Shopify, Carrefour OCC) — these work from any IP globally
   // without a proxy. If they return products, mix real + demo for the rest.
   if (DEMO_MODE) {
-    const apiOnlyStores = STORES.filter(s => s.apiUrl || s.apiUrls?.length);
+    const apiOnlyStores = STORES.filter(s => !s.disabled && (s.apiUrl || s.apiUrls?.length));
     if (apiOnlyStores.length > 0) {
       const apiResults = await Promise.all(apiOnlyStores.map(s => scrapeStore(s, query)));
       const apiCount = apiResults.reduce((n, r) => n + r.products.length, 0);
@@ -1434,7 +1437,8 @@ async function runScrape(query) {
     return runDemoScrape(query);
   }
 
-  const storeResults = await Promise.all(STORES.map(store => scrapeStore(store, query)));
+  const activeStores = STORES.filter(s => !s.disabled);
+  const storeResults = await Promise.all(activeStores.map(store => scrapeStore(store, query)));
 
   const totalProducts = storeResults.reduce((sum, sr) => sum + (sr.products?.length || 0), 0);
 
