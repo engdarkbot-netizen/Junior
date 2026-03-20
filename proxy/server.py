@@ -1,20 +1,16 @@
 """
 Rotating proxy server — listens on localhost:8080, forwards through a live proxy pool.
-- Round-robins across working proxies
-- Retries on failure, marks bad proxies
-- Auto-refreshes pool in background every REFRESH_INTERVAL seconds
+Uses raw asyncio TCP so CONNECT tunneling works correctly for HTTPS.
 """
 
 import asyncio
+import json
 import logging
 import time
 import itertools
-import signal
-import sys
 from typing import Optional
 
 import aiohttp
-from aiohttp import web
 
 from pool import Proxy, fetch_and_validate, REFRESH_INTERVAL
 
@@ -23,8 +19,9 @@ log = logging.getLogger(__name__)
 
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = 8080
-MAX_FAILURES = 3      # remove proxy after this many failures
-RETRY_COUNT = 3       # retries per request before giving up
+MAX_FAILURES = 3
+RETRY_COUNT = 3
+PIPE_TIMEOUT = 60
 
 
 class ProxyPool:
@@ -56,11 +53,10 @@ class ProxyPool:
     async def mark_failure(self, proxy: Proxy):
         async with self._lock:
             proxy.mark_failure()
-            if proxy.failures >= MAX_FAILURES:
-                if proxy in self._proxies:
-                    self._proxies.remove(proxy)
-                    self._cycle = itertools.cycle(self._proxies) if self._proxies else itertools.cycle([])
-                    log.warning(f"Removed dead proxy {proxy.url} ({len(self._proxies)} remaining)")
+            if proxy.failures >= MAX_FAILURES and proxy in self._proxies:
+                self._proxies.remove(proxy)
+                self._cycle = itertools.cycle(self._proxies) if self._proxies else itertools.cycle([])
+                log.warning(f"Removed dead proxy {proxy.url} ({len(self._proxies)} remaining)")
 
     def size(self) -> int:
         return len(self._proxies)
@@ -69,8 +65,175 @@ class ProxyPool:
 pool = ProxyPool()
 
 
-async def background_refresh(app):
-    """Periodically refreshes the proxy pool."""
+async def pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    try:
+        while True:
+            data = await asyncio.wait_for(reader.read(8192), timeout=PIPE_TIMEOUT)
+            if not data:
+                break
+            writer.write(data)
+            await writer.drain()
+    except Exception:
+        pass
+    finally:
+        try:
+            writer.close()
+        except Exception:
+            pass
+
+
+async def handle_connect(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter, target: str):
+    """HTTPS tunnel: CONNECT host:port — pipe through upstream proxy."""
+    host, _, port_str = target.partition(":")
+    port = int(port_str) if port_str else 443
+
+    for attempt in range(RETRY_COUNT):
+        proxy = await pool.get()
+        if proxy is None:
+            client_writer.write(b"HTTP/1.1 503 No proxies available\r\n\r\n")
+            await client_writer.drain()
+            return
+
+        try:
+            up_reader, up_writer = await asyncio.wait_for(
+                asyncio.open_connection(proxy.host, proxy.port), timeout=10
+            )
+            # Send CONNECT to upstream proxy
+            up_writer.write(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+            await up_writer.drain()
+
+            # Read upstream response
+            resp_line = await asyncio.wait_for(up_reader.readline(), timeout=10)
+            if b"200" not in resp_line:
+                up_writer.close()
+                await pool.mark_failure(proxy)
+                continue
+
+            # Drain response headers
+            while True:
+                line = await asyncio.wait_for(up_reader.readline(), timeout=10)
+                if line in (b"\r\n", b"\n", b""):
+                    break
+
+            # Tell client tunnel is open
+            client_writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+            await client_writer.drain()
+
+            # Bidirectional pipe
+            await asyncio.gather(
+                pipe(client_reader, up_writer),
+                pipe(up_reader, client_writer),
+            )
+            return
+
+        except Exception as e:
+            log.debug(f"CONNECT via {proxy.url} failed: {e}")
+            await pool.mark_failure(proxy)
+
+    client_writer.write(b"HTTP/1.1 502 All proxies failed\r\n\r\n")
+    await client_writer.drain()
+
+
+async def handle_http(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter,
+                      method: str, url: str, headers: dict, body: bytes):
+    """Plain HTTP request — forward through upstream proxy."""
+    for attempt in range(RETRY_COUNT):
+        proxy = await pool.get()
+        if proxy is None:
+            await asyncio.sleep(2)
+            continue
+        try:
+            connector = aiohttp.TCPConnector(ssl=False)
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.request(
+                    method=method, url=url, headers=headers,
+                    data=body or None, proxy=proxy.url,
+                    timeout=aiohttp.ClientTimeout(total=15),
+                    allow_redirects=True, ssl=False,
+                ) as resp:
+                    content = await resp.read()
+                    proxy.mark_success(0.0)
+
+                    resp_headers = ""
+                    for k, v in resp.headers.items():
+                        if k.lower() not in ("transfer-encoding", "content-encoding"):
+                            resp_headers += f"{k}: {v}\r\n"
+
+                    response = (
+                        f"HTTP/1.1 {resp.status} {resp.reason}\r\n"
+                        f"{resp_headers}"
+                        f"Content-Length: {len(content)}\r\n"
+                        f"Connection: close\r\n\r\n"
+                    ).encode() + content
+
+                    client_writer.write(response)
+                    await client_writer.drain()
+                    return
+
+        except Exception as e:
+            log.debug(f"HTTP via {proxy.url} failed: {e}")
+            await pool.mark_failure(proxy)
+
+    client_writer.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\nAll proxies failed")
+    await client_writer.drain()
+
+
+async def handle_client(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter):
+    peer = client_writer.get_extra_info("peername")
+    try:
+        # Read request line
+        request_line = await asyncio.wait_for(client_reader.readline(), timeout=15)
+        if not request_line:
+            return
+
+        parts = request_line.decode(errors="replace").strip().split()
+        if len(parts) < 3:
+            return
+        method, target, _ = parts[0], parts[1], parts[2]
+
+        # Read headers
+        headers = {}
+        while True:
+            line = await asyncio.wait_for(client_reader.readline(), timeout=10)
+            if line in (b"\r\n", b"\n", b""):
+                break
+            if b":" in line:
+                k, _, v = line.decode(errors="replace").partition(":")
+                headers[k.strip()] = v.strip()
+
+        # Status endpoint
+        if method == "GET" and target == "/__status__":
+            body = json.dumps({
+                "status": "running",
+                "pool_size": pool.size(),
+                "last_refresh": pool._last_refresh,
+            }).encode()
+            client_writer.write(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\n\r\n".encode() + body
+            )
+            await client_writer.drain()
+            return
+
+        if method == "CONNECT":
+            await handle_connect(client_reader, client_writer, target)
+        else:
+            content_length = int(headers.get("Content-Length", 0))
+            body = await client_reader.read(content_length) if content_length > 0 else b""
+            clean_headers = {k: v for k, v in headers.items()
+                             if k.lower() not in ("proxy-connection", "proxy-authorization")}
+            await handle_http(client_reader, client_writer, method, target, clean_headers, body)
+
+    except Exception as e:
+        log.debug(f"Client handler error ({peer}): {e}")
+    finally:
+        try:
+            client_writer.close()
+        except Exception:
+            pass
+
+
+async def background_refresh():
     while True:
         try:
             await asyncio.sleep(REFRESH_INTERVAL)
@@ -81,145 +244,23 @@ async def background_refresh(app):
             log.error(f"Background refresh error: {e}")
 
 
-async def forward_request(request: web.Request) -> web.Response:
-    """Forward the incoming HTTP request through a rotating proxy."""
-    url = str(request.url)
-    body = await request.read()
-    headers = {k: v for k, v in request.headers.items()
-               if k.lower() not in ("host", "proxy-connection", "proxy-authorization")}
-
-    last_error = None
-    for attempt in range(1, RETRY_COUNT + 1):
-        proxy = await pool.get()
-        if proxy is None:
-            log.warning("No proxies available — waiting for pool refresh")
-            await asyncio.sleep(5)
-            continue
-
-        log.debug(f"[{attempt}] {request.method} {url} via {proxy.url}")
-        try:
-            connector = aiohttp.TCPConnector(ssl=False)
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.request(
-                    method=request.method,
-                    url=url,
-                    headers=headers,
-                    data=body if body else None,
-                    proxy=proxy.url,
-                    timeout=aiohttp.ClientTimeout(total=15),
-                    allow_redirects=True,
-                    ssl=False,
-                ) as resp:
-                    content = await resp.read()
-                    proxy.mark_success(latency=0.0)
-                    return web.Response(
-                        status=resp.status,
-                        headers={k: v for k, v in resp.headers.items()
-                                 if k.lower() not in ("transfer-encoding", "content-encoding")},
-                        body=content,
-                    )
-        except Exception as e:
-            last_error = e
-            log.debug(f"Proxy {proxy.url} failed: {e}")
-            await pool.mark_failure(proxy)
-
-    log.error(f"All {RETRY_COUNT} attempts failed for {url}: {last_error}")
-    return web.Response(status=502, text=f"Proxy failed after {RETRY_COUNT} attempts: {last_error}")
-
-
-async def handle_connect(request: web.Request) -> web.StreamResponse:
-    """Handle HTTPS CONNECT tunneling."""
-    host, _, port_str = request.path.partition(":")
-    port = int(port_str) if port_str else 443
-
-    proxy = await pool.get()
-    if proxy is None:
-        return web.Response(status=503, text="No proxies available")
-
-    try:
-        # Open tunnel to upstream proxy
-        reader, writer = await asyncio.open_connection(proxy.host, proxy.port)
-        connect_req = f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n"
-        writer.write(connect_req.encode())
-        await writer.drain()
-
-        response_line = await reader.readline()
-        if b"200" not in response_line:
-            writer.close()
-            await pool.mark_failure(proxy)
-            return web.Response(status=502, text="Upstream CONNECT failed")
-
-        # Drain rest of response headers
-        while True:
-            line = await reader.readline()
-            if line in (b"\r\n", b"\n", b""):
-                break
-
-        # Send 200 to client
-        resp = web.StreamResponse(status=200, reason="Connection Established")
-        await resp.prepare(request)
-
-        # Pipe data both ways
-        async def pipe(src, dst):
-            try:
-                while True:
-                    data = await src.read(8192)
-                    if not data:
-                        break
-                    dst.write(data)
-                    await dst.drain()
-            except Exception:
-                pass
-
-        client_reader = request.transport
-        await asyncio.gather(
-            pipe(reader, writer),
-            return_exceptions=True
-        )
-        writer.close()
-        return resp
-
-    except Exception as e:
-        await pool.mark_failure(proxy)
-        return web.Response(status=502, text=f"CONNECT tunnel error: {e}")
-
-
-async def handle(request: web.Request) -> web.Response:
-    if request.method == "CONNECT":
-        return await handle_connect(request)
-    return await forward_request(request)
-
-
-async def status_handler(request: web.Request) -> web.Response:
-    return web.json_response({
-        "status": "running",
-        "pool_size": pool.size(),
-        "last_refresh": pool._last_refresh,
-    })
-
-
-async def on_startup(app):
-    log.info("Initial proxy pool fetch...")
+async def main():
     await pool.refresh()
-    app["refresh_task"] = asyncio.create_task(background_refresh(app))
 
+    server = await asyncio.start_server(handle_client, LISTEN_HOST, LISTEN_PORT)
+    refresh_task = asyncio.create_task(background_refresh())
 
-async def on_shutdown(app):
-    app["refresh_task"].cancel()
-    await app["refresh_task"]
+    log.info(f"Proxy server running on {LISTEN_HOST}:{LISTEN_PORT}")
+    log.info(f"Test: curl -x http://{LISTEN_HOST}:{LISTEN_PORT} https://httpbin.org/ip")
 
-
-def main():
-    app = web.Application()
-    app.router.add_route("*", "/{path_info:.*}", handle)
-    app.router.add_get("/__status__", status_handler)
-    app.on_startup.append(on_startup)
-    app.on_shutdown.append(on_shutdown)
-
-    log.info(f"Starting rotating proxy server on {LISTEN_HOST}:{LISTEN_PORT}")
-    log.info(f"Status endpoint: http://{LISTEN_HOST}:{LISTEN_PORT}/__status__")
-    web.run_app(app, host=LISTEN_HOST, port=LISTEN_PORT, access_log=None)
+    async with server:
+        try:
+            await server.serve_forever()
+        except asyncio.CancelledError:
+            pass
+        finally:
+            refresh_task.cancel()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
