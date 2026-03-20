@@ -1,0 +1,11 @@
+# Custom proxy list — one per line
+# Formats supported:
+#   host:port
+#   http://host:port
+#   socks5://host:port
+#
+# These are checked first before public sources.
+# Example:
+#   192.168.1.1:8080
+#   http://10.0.0.1:3128
+#   socks5://proxy.example.com:1080
