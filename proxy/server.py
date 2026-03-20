@@ -82,40 +82,44 @@ async def pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
             pass
 
 
+async def open_connect_tunnel(proxy: Proxy, host: str, port: int):
+    """Open and verify a CONNECT tunnel through a proxy. Returns (reader, writer) or raises."""
+    up_reader, up_writer = await asyncio.wait_for(
+        asyncio.open_connection(proxy.host, proxy.port), timeout=10
+    )
+    up_writer.write(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+    await up_writer.drain()
+
+    resp_line = await asyncio.wait_for(up_reader.readline(), timeout=10)
+    if b"200" not in resp_line:
+        up_writer.close()
+        raise ConnectionError(f"Proxy returned: {resp_line.decode(errors='replace').strip()}")
+
+    # Drain response headers
+    while True:
+        line = await asyncio.wait_for(up_reader.readline(), timeout=10)
+        if line in (b"\r\n", b"\n", b""):
+            break
+
+    return up_reader, up_writer
+
+
 async def handle_connect(client_reader: asyncio.StreamReader, client_writer: asyncio.StreamWriter, target: str):
-    """HTTPS tunnel: CONNECT host:port — pipe through upstream proxy."""
+    """HTTPS tunnel: CONNECT host:port — verify upstream tunnel before replying 200 to client."""
     host, _, port_str = target.partition(":")
     port = int(port_str) if port_str else 443
 
+    tried = set()
     for attempt in range(RETRY_COUNT):
         proxy = await pool.get()
-        if proxy is None:
-            client_writer.write(b"HTTP/1.1 503 No proxies available\r\n\r\n")
-            await client_writer.drain()
-            return
+        if proxy is None or proxy.url in tried:
+            continue
+        tried.add(proxy.url)
 
         try:
-            up_reader, up_writer = await asyncio.wait_for(
-                asyncio.open_connection(proxy.host, proxy.port), timeout=10
-            )
-            # Send CONNECT to upstream proxy
-            up_writer.write(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
-            await up_writer.drain()
+            up_reader, up_writer = await open_connect_tunnel(proxy, host, port)
 
-            # Read upstream response
-            resp_line = await asyncio.wait_for(up_reader.readline(), timeout=10)
-            if b"200" not in resp_line:
-                up_writer.close()
-                await pool.mark_failure(proxy)
-                continue
-
-            # Drain response headers
-            while True:
-                line = await asyncio.wait_for(up_reader.readline(), timeout=10)
-                if line in (b"\r\n", b"\n", b""):
-                    break
-
-            # Tell client tunnel is open
+            # Tunnel verified — now tell the client it's open
             client_writer.write(b"HTTP/1.1 200 Connection Established\r\n\r\n")
             await client_writer.drain()
 
