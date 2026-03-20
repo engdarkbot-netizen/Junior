@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 TEST_URL = "https://httpbin.org/ip"
 TIMEOUT = 4
 VALIDATE_CONCURRENCY = 200
-MAX_PROXIES_TO_VALIDATE = 500   # cap to keep startup fast
+MAX_PROXIES_TO_VALIDATE = 200   # Saudi pool is smaller, validate all
 REFRESH_INTERVAL = 300  # seconds between pool refreshes
 
 
@@ -42,32 +42,35 @@ class Proxy:
         self.last_used = time.time()
 
 
+# Target country — set to None for all countries
+TARGET_COUNTRY = "SA"  # Saudi Arabia
+
 SOURCES = [
-    # GeoNode — large free pool
+    # GeoNode — Saudi IPs only
     {
-        "url": "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps",
+        "url": f"https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&country={TARGET_COUNTRY}",
         "parse": lambda data: [
             Proxy(host=p["ip"], port=int(p["port"]), protocol=p["protocols"][0])
             for p in data.get("data", [])
             if p.get("ip") and p.get("port")
         ],
     },
-    # Proxyscrape — plain text list
+    # GeoNode page 2
     {
-        "url": "https://api.proxyscrape.com/v3/free-proxy-list/get?request=displayproxies&protocol=http&timeout=5000&country=all&ssl=all&anonymity=elite",
+        "url": f"https://proxylist.geonode.com/api/proxy-list?limit=500&page=2&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&country={TARGET_COUNTRY}",
+        "parse": lambda data: [
+            Proxy(host=p["ip"], port=int(p["port"]), protocol=p["protocols"][0])
+            for p in data.get("data", [])
+            if p.get("ip") and p.get("port")
+        ],
+    },
+    # Proxyscrape — Saudi IPs
+    {
+        "url": f"https://api.proxyscrape.com/v3/free-proxy-list/get?request=displayproxies&protocol=http&timeout=5000&country={TARGET_COUNTRY}&ssl=all&anonymity=all",
         "parse": lambda data: [
             Proxy(host=line.split(":")[0], port=int(line.split(":")[1]), protocol="http")
             for line in (data if isinstance(data, str) else "").strip().splitlines()
             if ":" in line and line.split(":")[1].isdigit()
-        ],
-    },
-    # OpenProxyList — JSON
-    {
-        "url": "https://openproxylist.xyz/http.txt",
-        "parse": lambda data: [
-            Proxy(host=line.split(":")[0], port=int(line.split(":")[1]), protocol="http")
-            for line in (data if isinstance(data, str) else "").strip().splitlines()
-            if ":" in line
         ],
     },
 ]
