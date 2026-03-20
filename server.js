@@ -1487,26 +1487,25 @@ app.get('/api/test-proxy', async (_req, res) => {
   }
   const results = {};
 
-  // Test 0: raw TCP connect to proxy host:port
+  // Helper: raw TCP connect with 5s timeout
+  const tcpTest = (host, port) => new Promise(resolve => {
+    const sock = new net.Socket();
+    const timer = setTimeout(() => { sock.destroy(); resolve({ ok: false, error: `TCP timeout (5s) to ${host}:${port}` }); }, 5000);
+    sock.connect(port, host, () => { clearTimeout(timer); sock.destroy(); resolve({ ok: true }); });
+    sock.on('error', err => { clearTimeout(timer); resolve({ ok: false, error: err.message }); });
+  });
+
+  // Test 0a: outbound TCP works at all? (Cloudflare DNS, port 80)
+  results.tcpCloudflare80 = await tcpTest('1.1.1.1', 80);
+
+  // Test 0b: can Railway reach the EC2 IP on port 22 (SSH)?
   const proxyUrl = new URL(PROXY_URL);
   const proxyHost = proxyUrl.hostname;
   const proxyPort = parseInt(proxyUrl.port, 10) || 3128;
-  results.tcpConnect = await new Promise(resolve => {
-    const sock = new net.Socket();
-    const timer = setTimeout(() => {
-      sock.destroy();
-      resolve({ ok: false, error: 'TCP timeout (5s)' });
-    }, 5000);
-    sock.connect(proxyPort, proxyHost, () => {
-      clearTimeout(timer);
-      sock.destroy();
-      resolve({ ok: true });
-    });
-    sock.on('error', err => {
-      clearTimeout(timer);
-      resolve({ ok: false, error: err.message });
-    });
-  });
+  results.tcpEC2port22 = await tcpTest(proxyHost, 22);
+
+  // Test 0c: the actual proxy port
+  results.tcpConnect = await tcpTest(proxyHost, proxyPort);
 
   // Test 1: lightweight API context
   try {
