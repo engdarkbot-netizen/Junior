@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "setup": "npx playwright install chromium",
-    "test": "node test-api.mjs"
+    "test": "node test-api.mjs",
+    "news:ai": "node ai-news-agent.mjs",
+    "news:saudi": "node saudi-stocks-agent.mjs",
+    "news": "node ai-news-agent.mjs && node saudi-stocks-agent.mjs"
   },
   "repository": {
     "type": "git",
